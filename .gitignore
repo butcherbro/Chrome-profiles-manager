@@ -169,9 +169,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-profiles/
-default_extensions/
 .DS_Store
 *log.json
 *log
 .idea/
+data/
