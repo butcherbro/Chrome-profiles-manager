@@ -1,177 +1,195 @@
 import os
 import shutil
 import subprocess
-import sys
+from sys import stderr, platform, exit
 import time
-import subprocess
-import questionary
-import threading
-from server.server import run_fastapi_server
 import socket
-from automation.initial_setup import initial_setup
-from automation.omega_proxy_setup import omega_proxy_setup
+import threading
+import re
+
+import questionary
+from loguru import logger
+
+from config import general_config
+from src.chrome.chrome import Chrome
+
+logger.remove()
+logger_level = "DEBUG" if general_config['show_debug_logs'] else "INFO"
+log_format = "<white>{time:HH:mm:ss}</white> | <level>{level: <8}</level> | <white>{message}</white>"
+logger.add(stderr, level=logger_level, format=log_format)
+logger.add("data/debug_log.log", level="DEBUG", format=log_format)
+
+custom_style = questionary.Style([
+    # ('qmark', 'fg:#00ff00 bold'),
+    ('question', 'bold'),
+    ('answer', 'fg:#ff9900 bold'),
+    ('pointer', 'fg:#ff9900 bold'),
+    ('text', 'fg:#4d4d4d'),
+    ('disabled', 'fg:#858585 italic')
+])
 
 
+def paginate_profiles(profiles, items_per_page=10):
+    total_pages = (len(profiles) + items_per_page - 1) // items_per_page
+    current_page = 0
+    selected_profiles = []
 
-PROJECT_PATH = os.getcwd()
-CHROME_DATA_PATH = os.path.join(PROJECT_PATH, "profiles")
-DEFAULT_EXTENSIONS_PATH = os.path.join(PROJECT_PATH, "default_extensions")
-CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe" if sys.platform == "win32" else "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-CHROME_DRIVER_PATH = os.path.join(os.getcwd(), "automation", "chromedriver")
+    while current_page < total_pages:
+        start = current_page * items_per_page
+        end = min(start + items_per_page, len(profiles))
+        page_profiles = profiles[start:end]
 
-TEMPLATE_PATH = os.path.join(PROJECT_PATH, "client", "template.html")
-HTML_OUTPUT_PATH = os.path.join(CHROME_DATA_PATH, "WelcomePages")
-DEBUG_PORTS = {}
+        selected_profiles_on_page = questionary.checkbox(
+            f"Выбери профиля для запуска (страница {current_page + 1} из {total_pages})",
+            choices=page_profiles,
+            style=custom_style,
+        ).ask()
+
+        selected_profiles.extend(selected_profiles_on_page)
+
+        # Добавляем выбранные на текущей странице профили
+
+        current_page += 1
+
+    return selected_profiles
 
 
-def create_chrome_profile(profile_name: str) -> None:
-    profile_path = os.path.join(CHROME_DATA_PATH, f'Profile {profile_name}')
-
-    try:
-        os.makedirs(profile_path)
-    except FileExistsError:
-        print(f'Profile {profile_name} already exists')
+def launch_multiple_profiles():
+    profiles_list = chrome.get_profiles_list()
+    if not profiles_list:
+        logger.error("❌  Профиля отсутствуют")
         return
 
-    profile_extensions_path = os.path.join(profile_path, "Extensions")
-    os.makedirs(profile_extensions_path, exist_ok=True)
-    for extension in os.listdir(DEFAULT_EXTENSIONS_PATH):
-        src_folder = os.path.join(DEFAULT_EXTENSIONS_PATH, extension)
-        dest_folder = os.path.join(profile_extensions_path, extension)
-        shutil.copytree(src_folder, dest_folder, dirs_exist_ok=True)
+    numeric_profiles = [profile for profile in profiles_list if profile.isdigit()]
+    non_numeric_profiles = [profile for profile in profiles_list if not any(char.isdigit() for char in profile)]
+    numeric_profiles.sort(key=int)
+    non_numeric_profiles.sort()
 
-    init_profile(profile_name)
+    profiles_list_sorted = numeric_profiles + non_numeric_profiles
 
-    print(f'Profile {profile_name} created')
+    selected_profiles = paginate_profiles(profiles_list_sorted)
+
+    if not selected_profiles:
+        logger.warning("⚠️ Профиля не выбраны")
+        return
+
+    # TODO: get them from chrome object
+    startup_scripts = {
+        'Первичная настройка Chrome': 'run_initial_setup',
+        # 'Настройка Omega Proxy': 'run_omega_proxy_setup',
+    }
+
+    chosen_startup_script_human_names = questionary.checkbox(
+        "Выбери стартап скрипты",
+        choices=list(startup_scripts.keys()),
+        style=custom_style
+    ).ask()
+
+    chosen_startup_scripts = [startup_scripts[name] for name in chosen_startup_script_human_names]
+
+    for name in selected_profiles:
+        chrome.launch_profile(
+            str(name),
+            chosen_startup_scripts,
+            True if len(chosen_startup_scripts) > 0 else False
+        )
 
 
-def init_profile(profile_name: str):
-    launch_args, free_port = create_launch_flags(profile_name)
-    chrome_process = subprocess.Popen([CHROME_PATH, *launch_args])
-    time.sleep(0.5)
-    chrome_process.terminate()
-    chrome_process.wait()
-
-
-def create_launch_flags(profile_name: str, debug: bool = False) -> list[str]:
-    profile_path = os.path.join(CHROME_DATA_PATH, f'Profile {profile_name}')
-    profile_extensions_path = os.path.join(profile_path, "Extensions")
-    profile_html_path = get_profile_page(profile_name)
-
-    all_extensions = []
-    for ext_id in os.listdir(profile_extensions_path):
-        versions_dir = os.path.join(profile_extensions_path, ext_id)
-        if os.path.isdir(versions_dir):
-            for version in os.listdir(versions_dir):
-                version_path = os.path.join(versions_dir, version)
-                if os.path.isfile(os.path.join(version_path, "manifest.json")):
-                    all_extensions.append(version_path)
-
-    load_arg = ",".join(all_extensions)
-
-    flags =  [
-        f"--user-data-dir={CHROME_DATA_PATH}",
-        f"--profile-directory={f'Profile {profile_name}'}",
-        "--no-first-run",
-        f"--load-extension={load_arg}",
-        f"file:///{profile_html_path}",
-        "--no-sync",
-        "--disable-features=IdentityConsistency",
-        "--disable-accounts-receiver"
+def create_multiple_profiles():
+    create_methods = [
+        'ручные имена',
+        'автоматические имена',
+        '<- назад'
     ]
 
-    free_port = None
-    if debug:
-        free_port = find_free_port()
-        if free_port:
-            flags.append(f'--remote-debugging-port={free_port}')
-        else:
-            print('Missing free ports for debug')
+    create_method = questionary.select(
+        "Выбери способ создания имен",
+        choices=create_methods,
+        style=custom_style
+    ).ask()
 
-    return flags, free_port
+    if not create_method:
+        logger.warning("⚠️ Активность не выбрана")
+        return
 
-def find_free_port(start_port=9222, max_port=9300):
-    for port in range(start_port, max_port):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            result = s.connect_ex(('127.0.0.1', port))
-            if result != 0:  # 0 means port is in use
-                return port
-    return None
+    if create_method == '<- назад':
+        return
+
+    existing_profile_names = chrome.get_profiles_list()
+
+    profiles_to_create = []
+
+    if create_method == 'ручные имена':
+        selected_names = questionary.text(
+            "Впиши названия профилей через запятую\n",
+            style=custom_style
+        ).ask()
+        selected_names = list(set(i.strip() for i in selected_names.split(',') if i.strip()))
+        names_to_skip = list(set(existing_profile_names) & set(selected_names))
+
+        if names_to_skip:
+            logger.warning(f'⚠️ Пропускаем профиля {names_to_skip}, имена уже заняты')
+
+        profiles_to_create = [item for item in selected_names if item not in names_to_skip]
+
+    elif create_method == 'автоматические имена':
+        amount = questionary.text(
+            "Впиши количество профилей для создания\n",
+            style=custom_style
+        ).ask()
+
+        try:
+            amount = int(amount)
+        except ValueError:
+            logger.warning('⚠️ Неверное количество')
+            return
+
+        highest_existing_numeric_name = 0
+
+        for name in existing_profile_names:
+            try:
+                num = int(name)
+                if num > highest_existing_numeric_name:
+                    highest_existing_numeric_name = num
+            except ValueError:
+                continue
+
+        start = highest_existing_numeric_name + 1
+        profiles_to_create = list(range(start, start + amount))
+
+    for name in profiles_to_create:
+        chrome.create_new_profile(str(name))
 
 
-def get_profile_page(profile_name: str):
-    os.makedirs(HTML_OUTPUT_PATH, exist_ok=True)
-    
-    profile_html_path = os.path.join(HTML_OUTPUT_PATH, f"{profile_name}.html")
-    
-    # if os.path.exists(profile_html_path):
-    #     return profile_html_path
-    
-    with open(TEMPLATE_PATH, 'r') as template_file:
-        template_content = template_file.read()
-    
-    profile_page_content = template_content.replace("{{ profile_name }}", profile_name)
-    
-    with open(profile_html_path, 'w') as profile_page_file:
-        profile_page_file.write(profile_page_content)
-    
-    return profile_html_path
-
-    
-def launch_profile(profile_name: str, debug=False) -> int:
-    launch_args, free_port = create_launch_flags(profile_name, debug)
-    with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
-        subprocess.Popen([CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
-
-    time.sleep(2)
-    return free_port
-
-
-def get_profiles():
-    profiles = []
-    for item in os.listdir(CHROME_DATA_PATH):
-        item_path = os.path.join(CHROME_DATA_PATH, item)
-        
-        if os.path.isdir(item_path) and item.startswith("Profile"):
-            profiles.append(item.replace('Profile ', ''))
-    
-    return profiles
+def quit_program():
+    logger.info("Работа завершена")
+    exit(0)
 
 
 def main():
-    # server_thread = threading.Thread(target=run_fastapi_server)
-    # server_thread.daemon = True  # Обеспечивает закрытие потока при завершении программы
-    # server_thread.start()
+    main_activities_list = {
+        '🚀 запуск профилей': launch_multiple_profiles,
+        '🤖 создание профилей': create_multiple_profiles,
+        '🚪 выход': quit_program
+    }
 
-    time.sleep(1)
+    while True:  # Infinite loop to keep menu open
+        main_activity = questionary.select(
+            "🔧 Выбери действие",
+            choices=list(main_activities_list.keys()),
+            style=custom_style
+        ).ask()
 
-    profiles = get_profiles()
-    
-    if not profiles:
-        print("No profiles found")
-        return
+        if not main_activity:
+            logger.warning("⚠️ Активность не выбрана")
+            continue
 
-    selected_profiles = questionary.checkbox(
-        "Select profiles to launch:",
-        choices=profiles
-    ).ask()
-
-    if not selected_profiles:
-        print("No profiles selected")
-        return
-    
-    for profile in selected_profiles:
-        debug_port = launch_profile(profile, True)
-        DEBUG_PORTS["profile"] = debug_port
-        initial_setup(debug_port, CHROME_DRIVER_PATH)
-
-    # server_thread.join()
+        else:
+            main_activities_list[main_activity]()
+            continue
 
 
 if __name__ == '__main__':
-    create_chrome_profile("1")
-    # main()
-    debug_port = launch_profile("1", True)
-    DEBUG_PORTS["profile"] = debug_port
-    # initial_setup(debug_port, CHROME_DRIVER_PATH, "1")
-    omega_proxy_setup(debug_port, CHROME_DRIVER_PATH, "1", "http://user:pass@10.10.10.10:800")
+    root_path = os.getcwd()
+    chrome = Chrome(root_path)
+    main()
