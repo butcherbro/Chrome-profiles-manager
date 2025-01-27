@@ -17,6 +17,7 @@ class Chrome:
     def __init__(self, root_path: str):
         self.root_path = root_path
         self.debug_ports = {}
+        self.chosen_debug_ports = []
         Chrome.init_class_variables(self.root_path)
 
         self.automation_scripts = {
@@ -65,17 +66,19 @@ class Chrome:
         logger.info(f'✅ Профиль {profile_name} создан')
 
     def launch_profile(self, profile_name: str, startup_scripts: list[str], debug=False) -> None:
-        launch_args, free_port = self.__create_launch_flags(profile_name, debug)
+        launch_args = self.__create_launch_flags(profile_name, debug)
+
         with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
             subprocess.Popen([Chrome.CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
 
-        time.sleep(0.2)
-        self.debug_ports[profile_name] = free_port
+        if debug:
+            time.sleep(2)  # to make sure listening on port established
 
         if len(startup_scripts) == 0:
             return
 
         try:
+            logger.debug(f'{profile_name} - connecting to debug port {self.debug_ports[profile_name]}')
             driver = establish_connection(
                 self.debug_ports[profile_name],
                 Chrome.CHROME_DRIVER_PATH
@@ -108,13 +111,13 @@ class Chrome:
         return profiles
 
     def __init_profile(self, profile_name: str) -> None:
-        launch_args, free_port = self.__create_launch_flags(profile_name)
+        launch_args = self.__create_launch_flags(profile_name)
         chrome_process = subprocess.Popen([Chrome.CHROME_PATH, *launch_args])
         time.sleep(1)  # to init data in profile folder
         chrome_process.terminate()
         chrome_process.wait()
 
-    def __create_launch_flags(self, profile_name: str, debug: bool = False) -> tuple[list[str], int | None]:
+    def __create_launch_flags(self, profile_name: str, debug: bool = False) -> list[str]:
         profile_path = self.__get_profile_path(profile_name)
         profile_extensions_path = os.path.join(profile_path, "Extensions")
         profile_html_path = self.__get_profile_welcome_page(profile_name)
@@ -141,15 +144,15 @@ class Chrome:
             "--disable-accounts-receiver"
         ]
 
-        free_port = None
         if debug:
             free_port = self.__find_free_port()
             if free_port:
+                self.debug_ports[profile_name] = free_port
                 flags.append(f'--remote-debugging-port={free_port}')
             else:
                 logger.warning('⚠️ Отсутствуют свободные порты для подключения')
 
-        return flags, free_port
+        return flags
 
     @staticmethod
     def __get_profile_path(profile_name: str) -> str:
@@ -173,11 +176,12 @@ class Chrome:
 
         return profile_welcome_page_path
 
-    @staticmethod
-    def __find_free_port(start_port=9222, max_port=9300) -> int | None:
+    def __find_free_port(self, start_port=9222, max_port=9300) -> int | None:
         for port in range(start_port, max_port):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 result = s.connect_ex(('127.0.0.1', port))
-                if result != 0:
+                if result != 0 and port not in self.chosen_debug_ports:
+                    self.chosen_debug_ports.append(port)
                     return port
+
         return None

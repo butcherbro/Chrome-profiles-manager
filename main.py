@@ -6,6 +6,7 @@ import time
 import socket
 import threading
 import re
+import concurrent.futures
 
 import questionary
 from loguru import logger
@@ -93,6 +94,19 @@ def launch_multiple_profiles():
             chosen_startup_scripts,
             True if len(chosen_startup_scripts) > 0 else False
         )
+
+    # with concurrent.futures.ThreadPoolExecutor() as executor:
+    #     futures = []
+    #     for name in selected_profiles:
+    #         futures.append(executor.submit(
+    #             chrome.launch_profile,
+    #             str(name),
+    #             chosen_startup_scripts,
+    #             True if len(chosen_startup_scripts) > 0 else False
+    #         ))
+    #
+    #     for future in concurrent.futures.as_completed(futures):
+    #         future.result()
 
 
 def create_multiple_profiles():
