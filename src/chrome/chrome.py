@@ -45,59 +45,72 @@ class Chrome:
         cls.PROFILE_WELCOME_PAGES_OUTPUT_PATH = os.path.join(cls.CHROME_DATA_PATH, "WelcomePages")
 
     def create_new_profile(self, profile_name: str) -> None:
-        profile_path = self.__get_profile_path(profile_name)
-        profile_extensions_path = os.path.join(profile_path, "Extensions")
-
         try:
-            os.makedirs(profile_path)
+            profile_path = self.__get_profile_path(profile_name)
+            profile_extensions_path = os.path.join(profile_path, "Extensions")
+
+            os.makedirs(profile_path)  # can trigger FileExistsError
+            os.makedirs(profile_extensions_path, exist_ok=True)
+
+            logger.info(f'✅ {profile_name} - профиль создан')
         except FileExistsError:
             logger.warning(f'⚠️ {profile_name} - профиль уже существует')
-            return
+        except Exception as e:
+            logger.error(f'❌️  {profile_name} - не удалось создать профиль')
+            logger.debug(f'{profile_name} - не удалось создать профиль, причина: {e}')
 
-        os.makedirs(profile_extensions_path, exist_ok=True)
-
-        for extension in os.listdir(Chrome.DEFAULT_EXTENSIONS_PATH):
-            src_folder = os.path.join(Chrome.DEFAULT_EXTENSIONS_PATH, extension)
-            dest_folder = os.path.join(profile_extensions_path, extension)
-            shutil.copytree(src_folder, dest_folder, dirs_exist_ok=True)
-
-        # self.__init_profile(profile_name)
-
-        logger.info(f'✅ Профиль {profile_name} создан')
-
-    def launch_profile(self, profile_name: str, startup_scripts: list[str], debug=False) -> None:
-        launch_args = self.__create_launch_flags(profile_name, debug)
-
-        with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
-            subprocess.Popen([Chrome.CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
-
-        if debug:
-            time.sleep(2)  # to make sure listening on port established
-
-        if len(startup_scripts) == 0:
-            return
-
+    def launch_profile(self, profile_name: str) -> None:
         try:
-            logger.debug(f'{profile_name} - connecting to debug port {self.debug_ports[profile_name]}')
-            driver = establish_connection(
-                self.debug_ports[profile_name],
-                Chrome.CHROME_DRIVER_PATH
-            )
+            launch_args = self.__create_launch_flags(profile_name)
+
+            with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
+                subprocess.Popen([Chrome.CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
+
+            logger.info(f'✅ {profile_name} - профиль запущен')
+        except Exception as e:
+            logger.error(f'❌  {profile_name} - не удалось запустить профиль')
+            logger.debug(f'{profile_name} - не удалось запустить профиль, причина: {e}')
+
+    def run_scripts(self, profile_name: str, startup_scripts) -> None:
+        try:
+            launch_args = self.__create_launch_flags(profile_name, True)
+
+            with open(os.devnull, 'w') as devnull:
+                chrome_process = subprocess.Popen([Chrome.CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
+
+            logger.debug(f'{profile_name} - профиль запущен')
+            time.sleep(1)
+
+            logger.debug(f'{profile_name} - подключаюсь к порту {self.debug_ports[profile_name]}')
+            driver = establish_connection(self.debug_ports[profile_name], Chrome.CHROME_DRIVER_PATH)
             logger.debug(f'{profile_name} - соединение установлено')
 
+            for script in startup_scripts:
+                try:
+                    human_name = self.automation_scripts[script]['human_name']
+                    logger.info(f'ℹ️ {profile_name} - запускаю скрипт "{human_name}"')
+                    self.automation_scripts[script]['method'](profile_name, driver)
+                    logger.info(f'✅ {profile_name} - скрипт "{human_name}" выполнен')
+                except Exception as e:
+                    human_name = self.automation_scripts[script]['human_name']
+                    logger.error(f'❌  {profile_name} - скрипт "{human_name}" завершен с ошибкой')
+                    logger.debug(f'{profile_name} - скрипт "{human_name}" завершен с ошибкой, причина: {e}')
+                    time.sleep(1000)
+
         except Exception as e:
-            logger.error(f'❌  {profile_name} - не удалось подключиться к порту {self.debug_ports[profile_name]}, выполнение скриптов прервано')
-            logger.debug(f'{profile_name} - не удалось подключиться к порту {self.debug_ports[profile_name]}, причина: {e}')
+            logger.error(f'❌  {profile_name} - не удалось запустить профиль, выполнение скриптов прервано')
+            logger.debug(f'{profile_name} - не удалось запустить профиль, причина: {e}')
             return
 
-        for script in startup_scripts:
-            logger.info(f'ℹ️ {profile_name} - запускаю скрипт "{self.automation_scripts[script]['human_name']}"')
-            try:
-                self.automation_scripts[script]['method'](profile_name, driver)
-                logger.info(f'✅  {profile_name} - скрипт "{self.automation_scripts[script]['human_name']}" выполнен')
-            except Exception as e:
-                logger.error(f'❌  {profile_name} - скрипт "{self.automation_scripts[script]['human_name']}" завершен с ошибкой')
-                logger.debug(f'❌  {profile_name} - скрипт "{self.automation_scripts[script]['human_name']}" завершен с ошибкой, причина: {e}')
+        time.sleep(1)
+
+        try:
+            chrome_process.terminate()
+            chrome_process.wait()
+            logger.debug(f'{profile_name} - профиль закрыт')
+        except Exception as e:
+            logger.error(f'❌  {profile_name} - не удалось закрыть профиль')
+            logger.debug(f'{profile_name} - не удалось закрыть профиль, причина: {e}')
 
     @staticmethod
     def get_profiles_list() -> list[str]:
@@ -109,13 +122,6 @@ class Chrome:
                 profiles.append(item.replace('Profile ', ''))
 
         return profiles
-
-    def __init_profile(self, profile_name: str) -> None:
-        launch_args = self.__create_launch_flags(profile_name)
-        chrome_process = subprocess.Popen([Chrome.CHROME_PATH, *launch_args])
-        time.sleep(1)  # to init data in profile folder
-        chrome_process.terminate()
-        chrome_process.wait()
 
     def __create_launch_flags(self, profile_name: str, debug: bool = False) -> list[str]:
         profile_path = self.__get_profile_path(profile_name)
@@ -150,7 +156,7 @@ class Chrome:
                 self.debug_ports[profile_name] = free_port
                 flags.append(f'--remote-debugging-port={free_port}')
             else:
-                logger.warning('⚠️ Отсутствуют свободные порты для подключения')
+                logger.warning(f'⚠️ {profile_name} - отсутствуют свободные порты для подключения')
 
         return flags
 
@@ -163,6 +169,7 @@ class Chrome:
         os.makedirs(Chrome.PROFILE_WELCOME_PAGES_OUTPUT_PATH, exist_ok=True)
         profile_welcome_page_path = os.path.join(Chrome.PROFILE_WELCOME_PAGES_OUTPUT_PATH, f"{profile_name}.html")
 
+        # USE CACHE
         # if os.path.exists(profile_welcome_page_path):
         #     return profile_welcome_page_path
 
