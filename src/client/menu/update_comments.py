@@ -3,12 +3,11 @@ import os
 
 import questionary
 
-from src.chrome.chrome import Chrome
 from .utils import select_profiles, custom_style, get_comments_for_profiles
 
 
-def update_comments(chrome: Chrome):
-    selected_profiles = select_profiles(chrome)
+def update_comments():
+    selected_profiles = select_profiles()
     if not selected_profiles:
         return
 

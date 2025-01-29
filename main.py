@@ -1,4 +1,3 @@
-import os
 from sys import stderr
 
 import questionary
@@ -8,7 +7,6 @@ from src.manager.manager import Manager
 from src.chrome.chrome import Chrome
 import src.client.menu as menu
 from config import general_config
-
 
 logger.remove()
 logger_level = "DEBUG" if general_config['show_debug_logs'] else "INFO"
@@ -50,6 +48,7 @@ def main_debug():
         str(1),
         ['agent_switcher', 'omega_proxy_setup'],
     )
+
 
 if __name__ == '__main__':
     chrome = Chrome()

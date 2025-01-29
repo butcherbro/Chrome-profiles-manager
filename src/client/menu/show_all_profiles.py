@@ -2,12 +2,11 @@ from loguru import logger
 from rich.table import Table
 from rich.console import Console
 
-from src.chrome.chrome import Chrome
 from .utils import get_all_sorted_profiles, get_comments_for_profiles
 
 
-def show_all_profiles(chrome: Chrome):
-    profiles_list_sorted = get_all_sorted_profiles(chrome)
+def show_all_profiles():
+    profiles_list_sorted = get_all_sorted_profiles()
     if not profiles_list_sorted:
         logger.error("❌  Профиля отсутствуют")
         return

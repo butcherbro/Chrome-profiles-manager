@@ -56,7 +56,7 @@ def select_profiles() -> list[str] | None:
         for profile in profiles_list_sorted:
             comments = get_comments_for_profiles()
             comment = comments.get(profile, '')
-            if comment_substring.lower() in comment.lower() :
+            if comment_substring.lower() in comment.lower():
                 selected_profiles.append(profile)
 
     elif select_method == '📦 выбрать все':
