@@ -8,7 +8,7 @@ from src.client.menu.utils.helpers import custom_style
 def select_profiles() -> list[str] | None:
     profiles_list_sorted = get_all_sorted_profiles()
     if not profiles_list_sorted:
-        logger.error("❌  Профиля отсутствуют")
+        logger.error("⛔ Профили отсутствуют")
         return
 
     select_options = [
@@ -43,7 +43,7 @@ def select_profiles() -> list[str] | None:
         names_to_skip = [name for name in names if name not in existing_profile_names]
 
         if names_to_skip:
-            logger.warning(f'⚠️ Пропускаем профиля {names_to_skip}, профиля не найдены')
+            logger.warning(f'⚠️ Пропускаем профили {names_to_skip}, профили не найдены')
 
         selected_profiles = [name for name in names if name not in names_to_skip]
 
@@ -63,7 +63,7 @@ def select_profiles() -> list[str] | None:
         selected_profiles = profiles_list_sorted
 
     if not selected_profiles:
-        logger.warning("⚠️ Профиля не выбраны")
+        logger.warning("⚠️ Профили не выбраны")
         return
 
     return selected_profiles
@@ -80,7 +80,7 @@ def paginate_profiles(profiles, items_per_page=10):
         page_profiles = profiles[start:end]
 
         selected_profiles_on_page = questionary.checkbox(
-            f"Выбери профиля для запуска (страница {current_page + 1} из {total_pages})",
+            f"Выбери профили для запуска (страница {current_page + 1} из {total_pages})",
             choices=page_profiles,
             style=custom_style,
         ).ask()

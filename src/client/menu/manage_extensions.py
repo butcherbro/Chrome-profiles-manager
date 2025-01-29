@@ -86,7 +86,7 @@ def add_default_extensions(selected_profiles: list[str], replace=False) -> None:
 
                     added_something = True
                 except Exception as e:
-                    logger.error(f'❌ {profile} - не удалось добавить расширение {ext_id}')
+                    logger.error(f'⛔ {profile} - не удалось добавить расширение {ext_id}')
                     logger.debug(f'{profile} - не удалось добавить расширение {ext_id}, причина: {e}')
             else:
                 if os.path.exists(dest_path):
@@ -97,7 +97,7 @@ def add_default_extensions(selected_profiles: list[str], replace=False) -> None:
                         logger.debug(f'{profile} - добавлено расширение {ext_id}')
                         added_something = True
                     except Exception as e:
-                        logger.error(f'❌ {profile} - не удалось добавить расширение {ext_id}')
+                        logger.error(f'⛔ {profile} - не удалось добавить расширение {ext_id}')
                         logger.debug(f'{profile} - не удалось добавить расширение {ext_id}, причина: {e}')
 
         if added_something:
@@ -139,7 +139,7 @@ def remove_extensions(selected_profiles: list[str]) -> None:
                     logger.debug(f'{profile} - расширение {ext_id} удалено')
                     removed_something = True
             except Exception as e:
-                logger.error(f'❌ {profile} - не удалоcь удалить расширение {ext_id}')
+                logger.error(f'⛔ {profile} - не удалоcь удалить расширение {ext_id}')
                 logger.debug(f'{profile} - не удалоcь удалить расширение {ext_id}, причина: {e}')
 
         if removed_something:

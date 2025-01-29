@@ -73,9 +73,9 @@ def turn_off_sync(name: str | int, driver: webdriver.Chrome, working_tab: str) -
                 close_all_other_tabs(driver, working_tab)
                 js_click(driver, toggle)
 
-        logger.info(f"✅  {name} - синхронизация выключена")
+        logger.info(f"✅ {name} - синхронизация выключена")
     except Exception as e:
-        logger.error(f"❌  {name} - не удалось выключить синхронизацию")
+        logger.error(f"⛔ {name} - не удалось выключить синхронизацию")
         logger.debug(f"{name} - не удалось выключить синхронизацию, причина: {e}")
 
 
@@ -109,9 +109,9 @@ def set_profile_name(name: str | int, driver: webdriver.Chrome, working_tab: str
         click_to_save_element.click()
         time.sleep(0.4)
 
-        logger.info(f'✅  {name} - имя профиля установлено')
+        logger.info(f'✅ {name} - имя профиля установлено')
     except Exception as e:
-        logger.error(f"❌  {name} - не удалось установить имя профиля")
+        logger.error(f"⛔ {name} - не удалось установить имя профиля")
         logger.debug(f"{name} - не удалось установить имя профиля, причина: {e}")
 
 
@@ -141,9 +141,9 @@ def turn_off_autofill(name: str | int, driver: webdriver.Chrome, working_tab: st
             close_all_other_tabs(driver, working_tab)
             js_click(driver, auto_sign_in_toggle)
         
-        logger.info(f"✅  {name} - автозаполнение паролей отключено")
+        logger.info(f"✅ {name} - автозаполнение паролей отключено")
     except Exception as e:
-        logger.error(f"❌  {name} - не удалось отключить автозаполнение паролей")
+        logger.error(f"⛔ {name} - не удалось отключить автозаполнение паролей")
         logger.debug(f"{name} - не удалось отключить автозаполнение паролей, причина: {e}")
 
 
@@ -221,9 +221,9 @@ def adjust_privacy_choices(name: str | int, driver: webdriver.Chrome, working_ta
         close_all_other_tabs(driver, working_tab)
         js_click(driver, done_button)
 
-        logger.info(f"✅  {name} - настройки приватности обновлены")
+        logger.info(f"✅ {name} - настройки приватности обновлены")
     except Exception as e:
-        logger.error(f"❌  {name} - не удалось обновить настройки приватности")
+        logger.error(f"⛔ {name} - не удалось обновить настройки приватности")
         logger.debug(f"{name} - не удалось обновить настройки приватности, причина: {e}")
 
 
@@ -255,7 +255,7 @@ def adjust_tabs_memorizing(name: str | int, driver: webdriver.Chrome, working_ta
         close_all_other_tabs(driver, working_tab)
         js_click(driver, chosen_option)
 
-        logger.info(f"✅  {name} - настройки запоминания вкладок обновлены")
+        logger.info(f"✅ {name} - настройки запоминания вкладок обновлены")
     except Exception as e:
-        logger.error(f"❌  {name} - не удалось обновить настройки запоминания вкладок")
+        logger.error(f"⛔ {name} - не удалось обновить настройки запоминания вкладок")
         logger.debug(f"{name} - не удалось обновить настройки запоминания вкладок, причина: {e}")

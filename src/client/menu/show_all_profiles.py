@@ -9,7 +9,7 @@ from .utils import get_all_sorted_profiles
 def show_all_profiles():
     profiles_list_sorted = get_all_sorted_profiles()
     if not profiles_list_sorted:
-        logger.error("❌  Профиля отсутствуют")
+        logger.error("⛔ Профили отсутствуют")
         return
 
     console = Console()
