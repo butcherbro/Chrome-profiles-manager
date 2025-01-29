@@ -5,7 +5,8 @@ from src.utils.helpers import get_profiles_list
 from src.chrome.chrome import Chrome
 from .utils import custom_style
 
-def create_multiple_profiles(chrome: Chrome) -> None:
+
+def create_multiple_profiles() -> None:
     create_methods = [
         '🖐 задать вручную',
         '🤖 задать автоматически',
@@ -67,5 +68,6 @@ def create_multiple_profiles(chrome: Chrome) -> None:
         start = highest_existing_numeric_name + 1
         profiles_to_create = list(range(start, start + amount))
 
+    chrome = Chrome()
     for name in profiles_to_create:
         chrome.create_new_profile(str(name))

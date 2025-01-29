@@ -1,14 +1,13 @@
 import time
 
 from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from loguru import logger
 
 from .utils import js_click, close_all_other_tabs
 
 
-def chrome_initial_setup(name: str | int, script_data_path: str, driver: webdriver.Chrome) -> None:
+def chrome_initial_setup(name: str | int, _, driver: webdriver.Chrome) -> None:
     working_tab = driver.current_window_handle
 
     turn_off_sync(name, driver, working_tab)
@@ -231,4 +230,3 @@ def adjust_tabs_memorizing(name: str | int, driver: webdriver.Chrome, working_ta
     except Exception as e:
         logger.error(f"❌  {name} - не удалось включить память на вкладки")
         logger.debug(f"{name} - не удалось включить память на вкладки, причина: {e}")
-

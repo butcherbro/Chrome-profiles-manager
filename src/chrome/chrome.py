@@ -1,8 +1,7 @@
-import os
 import subprocess
-from sys import platform
 import time
 import socket
+import os
 
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -106,7 +105,6 @@ class Chrome:
         except Exception as e:
             logger.error(f'❌ {profile_name} - не удалось закрыть профиль')
             logger.debug(f'{profile_name} - не удалось закрыть профиль, причина: {e}')
-
 
     def __establish_debug_port_connection(self, profile_name) -> webdriver.Chrome:
         debug_port = self.debug_ports[profile_name]
