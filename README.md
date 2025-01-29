@@ -3,14 +3,12 @@
 - [x] Test proxy
 - [x] Check logging
 - [ ] Rabby import script
-- [ ] Ctrl + C -> quit
+- [x] Ctrl + C -> quit
 - [x] по порядку скрипты выполнять
-- [ ] async extension copy
-- [ ] delete profile comments upon creation new one
+- [x] delete profile comments upon creation new one
 
-- [ ] tabs memory debug
+- [x] tabs memory debug
 - [ ] profile name set debug
-- [ ] custom click and send_keys class
 
 - [ ] chmod +x chromedriver
 

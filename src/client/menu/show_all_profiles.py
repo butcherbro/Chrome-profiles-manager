@@ -2,7 +2,8 @@ from loguru import logger
 from rich.table import Table
 from rich.console import Console
 
-from .utils import get_all_sorted_profiles, get_comments_for_profiles
+from src.utils.helpers import get_comments_for_profiles
+from .utils import get_all_sorted_profiles
 
 
 def show_all_profiles():
@@ -16,7 +17,13 @@ def show_all_profiles():
     table.add_column("Название", style="magenta")
     table.add_column("Комментарии", style="green")
 
-    comments = get_comments_for_profiles()
+    result = get_comments_for_profiles()
+    if result["success"]:
+        comments = result["comments"]
+    else:
+        logger.warning(f"⚠️ Не удалось загрузить комментарии, причина: {result["description"]}")
+        comments = {}
+
     for profile in profiles_list_sorted:
         comment = comments.get(profile, '')
         table.add_row(profile, comment)

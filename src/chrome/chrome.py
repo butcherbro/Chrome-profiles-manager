@@ -8,6 +8,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium import webdriver
 from loguru import logger
 
+from src.utils.helpers import set_comments_for_profiles
 from src.utils.constants import *
 from .scripts import *
 
@@ -39,6 +40,8 @@ class Chrome:
 
             os.makedirs(profile_path)  # can trigger FileExistsError
             os.makedirs(profile_extensions_path, exist_ok=True)
+
+            set_comments_for_profiles(profile_name, "")  # reset comment
 
             logger.info(f'✅ {profile_name} - профиль создан')
         except FileExistsError:

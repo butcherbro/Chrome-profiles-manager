@@ -3,8 +3,6 @@ from sys import stderr
 import questionary
 from loguru import logger
 
-from src.manager.manager import Manager
-from src.chrome.chrome import Chrome
 import src.client.menu as menu
 from config import general_config
 

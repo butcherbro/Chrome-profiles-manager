@@ -1,8 +1,8 @@
 import questionary
 from loguru import logger
 
-from src.utils.helpers import get_profiles_list
-from src.client.menu.utils.helpers import custom_style, get_comments_for_profiles
+from src.utils.helpers import get_profiles_list, get_comments_for_profiles
+from src.client.menu.utils.helpers import custom_style
 
 
 def select_profiles() -> list[str] | None:

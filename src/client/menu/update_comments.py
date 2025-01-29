@@ -2,8 +2,10 @@ import json
 import os
 
 import questionary
+from loguru import logger
 
-from .utils import select_profiles, custom_style, get_comments_for_profiles
+from src.utils.helpers import set_comments_for_profiles
+from .utils import select_profiles, custom_style
 
 
 def update_comments():
@@ -16,11 +18,12 @@ def update_comments():
         style=custom_style
     ).ask()
 
-    comments = get_comments_for_profiles()
+    result = set_comments_for_profiles(selected_profiles, new_comment)
 
-    for profile in selected_profiles:
-        comments[profile] = new_comment
+    if result["success"]:
+        logger.info("✅ Комментарии обновлены")
+    else:
+        logger.warning(f"⚠️ Не удалось обновить комментарии, причина: {result["description"]}")
 
-    comments_path = os.path.join('data', 'comments_for_profiles.json')
-    with open(comments_path, 'w', encoding="utf-8") as f:
-        json.dump(comments, f, indent=4, ensure_ascii=False)
+
+
