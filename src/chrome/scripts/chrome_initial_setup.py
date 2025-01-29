@@ -1,4 +1,6 @@
 import time
+import os
+import json
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -7,15 +9,26 @@ from loguru import logger
 from .utils import js_click, close_all_other_tabs
 
 
-def chrome_initial_setup(name: str | int, _, driver: webdriver.Chrome) -> None:
+def chrome_initial_setup(profile_name: str | int, script_data_path: str, driver: webdriver.Chrome) -> None:
+    with open(os.path.join(script_data_path, 'config.json'), 'r', encoding="utf-8") as f:
+        config = json.load(f)
+
     working_tab = driver.current_window_handle
 
-    turn_off_sync(name, driver, working_tab)
-    turn_off_autofill(name, driver, working_tab)
-    adjust_privacy_choices(name, driver, working_tab)
-    adjust_tabs_memorizing(name, driver, working_tab)
-    if name:
-        set_profile_name(name, driver, working_tab)
+    if config["run_delay_sec"]:
+        logger.debug(f"{profile_name} - waiting {config['run_delay_sec']} sec")
+        time.sleep(config["run_delay_sec"])
+
+    close_all_other_tabs(driver, working_tab)
+
+    turn_off_sync(profile_name, driver, working_tab)
+    turn_off_autofill(profile_name, driver, working_tab)
+    adjust_privacy_choices(profile_name, driver, working_tab)
+    adjust_tabs_memorizing(profile_name, driver, working_tab, config["startup_settings"]["remember_tabs"])
+
+    # TODO: fix this shit
+    # if profile_name:
+    #     set_profile_name(profile_name, driver, working_tab)
 
 
 def dive_into_shadowroots(driver: webdriver.Chrome, host_tags):
@@ -36,19 +49,29 @@ def turn_off_sync(name: str | int, driver: webdriver.Chrome, working_tab: str) -
             "settings-basic-page",
             "settings-people-page",
             "settings-sync-page",
-            "settings-personalization-options",
-            "settings-toggle-button"
+            "settings-personalization-options"
+        ]
+
+        child_host_tags = [
+            "settings-toggle-button#signinAllowedToggle",
+            "settings-toggle-button#metricsReportingControl",
+            "settings-toggle-button#urlCollectionToggle",
+            "settings-toggle-button#spellCheckControl",
+            "settings-toggle-button#searchSuggestToggle"
         ]
 
         driver.get("chrome://settings/syncSetup")
         time.sleep(0.5)
 
-        final_sr = dive_into_shadowroots(driver, host_tags)
+        mother_sr = dive_into_shadowroots(driver, host_tags)
+        for child_host in child_host_tags:
+            element = mother_sr.find_element(By.CSS_SELECTOR, child_host)
+            final_sr = element.shadow_root
 
-        toggle = final_sr.find_element(By.CSS_SELECTOR, 'cr-toggle')
-        if toggle.get_attribute('aria-pressed') == 'true':
-            close_all_other_tabs(driver, working_tab)
-            js_click(driver, toggle)
+            toggle = final_sr.find_element(By.CSS_SELECTOR, 'cr-toggle')
+            if toggle.get_attribute('aria-pressed') == 'true':
+                close_all_other_tabs(driver, working_tab)
+                js_click(driver, toggle)
 
         logger.info(f"✅  {name} - синхронизация выключена")
     except Exception as e:
@@ -71,9 +94,11 @@ def set_profile_name(name: str | int, driver: webdriver.Chrome, working_tab: str
         time.sleep(0.5)
 
         final_sr = dive_into_shadowroots(driver, host_tags)
-        click_to_save_element = final_sr.find_element(By.CSS_SELECTOR, 'cr-input')
+        click_to_save_element = final_sr.find_element(By.CSS_SELECTOR, 'h1')
+        # driver.execute_script("arguments[0].style.border='3px solid red'", click_to_save_element)
 
-        final_sr = click_to_save_element.shadow_root
+        child_host_tag = final_sr.find_element(By.CSS_SELECTOR, 'cr-input')
+        final_sr = child_host_tag.shadow_root
 
         name_input = final_sr.find_element(By.CSS_SELECTOR, 'input')
         close_all_other_tabs(driver, working_tab)
@@ -81,8 +106,8 @@ def set_profile_name(name: str | int, driver: webdriver.Chrome, working_tab: str
         name_input.send_keys(name)
 
         close_all_other_tabs(driver, working_tab)
-        js_click(driver, click_to_save_element)
-        time.sleep(0.2)
+        click_to_save_element.click()
+        time.sleep(0.4)
 
         logger.info(f'✅  {name} - имя профиля установлено')
     except Exception as e:
@@ -202,7 +227,7 @@ def adjust_privacy_choices(name: str | int, driver: webdriver.Chrome, working_ta
         logger.debug(f"{name} - не удалось обновить настройки приватности, причина: {e}")
 
 
-def adjust_tabs_memorizing(name: str | int, driver: webdriver.Chrome, working_tab: str) -> None:
+def adjust_tabs_memorizing(name: str | int, driver: webdriver.Chrome, working_tab: str, remember: bool = True) -> None:
     try:
         host_tags = [
             "settings-ui",
@@ -220,13 +245,17 @@ def adjust_tabs_memorizing(name: str | int, driver: webdriver.Chrome, working_ta
         driver.get('chrome://settings/onStartup')
         time.sleep(0.5)
 
-        # TODO: options from module config
         final_sr = dive_into_shadowroots(driver, host_tags)
-        chosen_option = final_sr.find_element(By.CSS_SELECTOR, f"controlled-radio-button[label='{options[0]}']")
+
+        if remember:
+            chosen_option = final_sr.find_element(By.CSS_SELECTOR, f"controlled-radio-button[label='{options[1]}']")
+        else:
+            chosen_option = final_sr.find_element(By.CSS_SELECTOR, f"controlled-radio-button[label='{options[0]}']")
+
         close_all_other_tabs(driver, working_tab)
         js_click(driver, chosen_option)
 
-        logger.info(f"✅  {name} - включена память на вкладки")
+        logger.info(f"✅  {name} - настройки запоминания вкладок обновлены")
     except Exception as e:
-        logger.error(f"❌  {name} - не удалось включить память на вкладки")
-        logger.debug(f"{name} - не удалось включить память на вкладки, причина: {e}")
+        logger.error(f"❌  {name} - не удалось обновить настройки запоминания вкладок")
+        logger.debug(f"{name} - не удалось обновить настройки запоминания вкладок, причина: {e}")

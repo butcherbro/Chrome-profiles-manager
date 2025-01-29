@@ -1,3 +1,5 @@
+import time
+
 from selenium.webdriver.remote.webelement import WebElement
 from selenium import webdriver
 
@@ -12,8 +14,15 @@ def parse_proxy(proxy: str) -> tuple[str, str, str, str, str]:
     return proto, user, password, host, port
 
 
-def js_click(_driver: webdriver.Chrome, element: WebElement) -> None:
+def js_click(
+        _driver: webdriver.Chrome,
+        element: WebElement,
+        sleep_before: int | float = 0.2,
+        sleep_after: int | float = 0.2
+) -> None:
+    time.sleep(sleep_before)
     _driver.execute_script("arguments[0].click();", element)
+    time.sleep(sleep_after)
 
 
 def close_all_other_tabs(_driver: webdriver.Chrome, current_tab: str) -> None:

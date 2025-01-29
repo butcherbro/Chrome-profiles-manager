@@ -7,11 +7,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
+from loguru import logger
 
 from .utils import parse_proxy, js_click, close_all_other_tabs
 
 
-def omega_proxy_setup(profile_name: str | int, script_data_path: str, _driver: webdriver.Chrome) -> None:
+def omega_proxy_setup(profile_name: str | int, script_data_path: str, driver: webdriver.Chrome) -> None:
     with open(os.path.join(script_data_path, 'config.json'), 'r') as f:
         config = json.load(f)
 
@@ -19,16 +20,22 @@ def omega_proxy_setup(profile_name: str | int, script_data_path: str, _driver: w
     if not proxy:
         raise Exception('прокси не найден')
 
-    working_tab = _driver.current_window_handle
+    working_tab = driver.current_window_handle
 
-    _driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/profile/proxy')
-    wait = WebDriverWait(_driver, 3)
+    if config["run_delay_sec"]:
+        logger.debug(f"{profile_name} - waiting {config['run_delay_sec']} sec")
+        time.sleep(config["run_delay_sec"])
+
+    close_all_other_tabs(driver, working_tab)
+
+    driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/profile/proxy')
+    wait = WebDriverWait(driver, 3)
 
     # Skip tour
     try:
         trash_modal = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[@ng-click='$dismiss()']")))
-        close_all_other_tabs(_driver, working_tab)
-        js_click(_driver, trash_modal)
+        close_all_other_tabs(driver, working_tab)
+        js_click(driver, trash_modal)
     except:
         pass
 
@@ -39,67 +46,67 @@ def omega_proxy_setup(profile_name: str | int, script_data_path: str, _driver: w
     proto_select.select_by_index(proto_select_options.index(proto.upper()))
 
     host_input = wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@ng-model="proxyEditors[scheme].host"]')))
-    close_all_other_tabs(_driver, working_tab)
+    close_all_other_tabs(driver, working_tab)
     host_input.clear()
     host_input.send_keys(host)
 
     port_input = wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@ng-model="proxyEditors[scheme].port"]')))
-    close_all_other_tabs(_driver, working_tab)
+    close_all_other_tabs(driver, working_tab)
     port_input.clear()
     port_input.send_keys(port)
 
     auth_button = wait.until(EC.element_to_be_clickable((By.XPATH, '(//button[@title="Authentication"])[1]')))
-    close_all_other_tabs(_driver, working_tab)
-    js_click(_driver, auth_button)
+    close_all_other_tabs(driver, working_tab)
+    js_click(driver, auth_button)
     time.sleep(0.1)
 
     username_input = wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@tabindex="-1"]//div[@class="modal-content"]//input[@placeholder="Username"]')))
-    close_all_other_tabs(_driver, working_tab)
+    close_all_other_tabs(driver, working_tab)
     username_input.clear()
     username_input.send_keys(user)
 
     password_input = wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@tabindex="-1"]//div[@class="modal-content"]//input[@placeholder="Password"]')))
-    close_all_other_tabs(_driver, working_tab)
+    close_all_other_tabs(driver, working_tab)
     password_input.clear()
     password_input.send_keys(password)
 
     save_auth_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@tabindex="-1"]//div[@class="modal-content"]//button[@type="submit"]')))
-    close_all_other_tabs(_driver, working_tab)
-    js_click(_driver, save_auth_btn)
+    close_all_other_tabs(driver, working_tab)
+    js_click(driver, save_auth_btn)
 
     time.sleep(0.1)
     apply_changes_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//a[@ng-click="applyOptions()"]')))
-    close_all_other_tabs(_driver, working_tab)
-    js_click(_driver, apply_changes_btn)
+    close_all_other_tabs(driver, working_tab)
+    js_click(driver, apply_changes_btn)
 
     # Turn it on
-    _driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/ui')
+    driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/ui')
 
     dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@on-toggle="toggled(open)"]')))
-    close_all_other_tabs(_driver, working_tab)
+    close_all_other_tabs(driver, working_tab)
     dropdown.click()
 
     set_proxy_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//ul[@role="listbox"]//span[@class="glyphicon glyphicon-globe"]')))
-    close_all_other_tabs(_driver, working_tab)
+    close_all_other_tabs(driver, working_tab)
     set_proxy_btn.click()
 
     time.sleep(0.1)
     apply_changes_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//a[@ng-click="applyOptions()"]')))
-    close_all_other_tabs(_driver, working_tab)
-    js_click(_driver, apply_changes_btn)
+    close_all_other_tabs(driver, working_tab)
+    js_click(driver, apply_changes_btn)
 
     # Turn off notifications
-    _driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/general')
+    driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/general')
 
     input_element = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Show count of failed web requests for resources in the current tab.')]/../input[contains(@class, 'ng-empty') or contains(@class, 'ng-not-empty')]")))
     if 'ng-not-empty' in input_element.get_attribute('class'):
-        close_all_other_tabs(_driver, working_tab)
-        js_click(_driver, input_element)
+        close_all_other_tabs(driver, working_tab)
+        js_click(driver, input_element)
         time.sleep(0.1)
 
         apply_changes_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//a[@ng-click="applyOptions()"]')))
-        close_all_other_tabs(_driver, working_tab)
-        js_click(_driver, apply_changes_btn)
+        close_all_other_tabs(driver, working_tab)
+        js_click(driver, apply_changes_btn)
 
 
 def get_proxy_by_profile_name(profile_name: str | int, script_data_path: str) -> str | None:

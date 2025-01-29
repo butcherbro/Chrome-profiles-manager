@@ -18,7 +18,7 @@ class Chrome:
         self.chosen_debug_ports = []
 
         self.scripts = {
-            'initial_setup': {
+            'chrome_initial_setup': {
                 'human_name': 'Первичная настройка Chrome',
                 'method': chrome_initial_setup,
             },
@@ -46,6 +46,33 @@ class Chrome:
         except Exception as e:
             logger.error(f'❌️ {profile_name} - не удалось создать профиль')
             logger.debug(f'{profile_name} - не удалось создать профиль, причина: {e}')
+
+    def init_profile_preferences(self, profile_name: str) -> bool:
+        initialized = False
+
+        try:
+            launch_args = self.__create_launch_flags(profile_name, False)
+
+            with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
+                chrome_process = subprocess.Popen([CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
+
+            logger.info(f'✅ {profile_name} - профиль запущен')
+        except Exception as e:
+            logger.error(f'❌ {profile_name} - не удалось запустить профиль для инициализации настроек')
+            logger.debug(f'{profile_name} - не удалось запустить профиль для инициализации настроек, причина: {e}')
+            return initialized
+
+        time.sleep(2)
+
+        try:
+            chrome_process.terminate()
+            chrome_process.wait()
+            logger.debug(f'{profile_name} - профиль закрыт')
+        except Exception as e:
+            logger.error(f'❌ {profile_name} - не удалось закрыть профиль')
+            logger.debug(f'{profile_name} - не удалось закрыть профиль, причина: {e}')
+
+        return initialized
 
     def launch_profile(self, profile_name: str, debug=False) -> subprocess.Popen | None:
         try:

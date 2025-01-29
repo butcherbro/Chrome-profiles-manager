@@ -1,3 +1,5 @@
+import os
+
 from loguru import logger
 
 from src.utils.constants import *
@@ -8,9 +10,9 @@ class Manager:
     def __init__(self):
 
         self.scripts = {
-            'initial_chrome_setup': {
-                'human_name': 'Первичная настройка Chrome',
-                'method': chrome_initial_setup,
+            'test_script': {
+                'human_name': 'Тестовый скрипт',
+                'method': test_script,
             }
         }
 

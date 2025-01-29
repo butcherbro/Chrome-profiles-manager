@@ -13,11 +13,17 @@ from .utils import js_click, close_all_other_tabs
 
 
 def agent_switcher(profile_name: str | int, script_data_path: str, driver: webdriver.Chrome):
-    with open(os.path.join(script_data_path, 'config.json'), 'r') as f:
+    with open(os.path.join(script_data_path, 'config.json'), 'r', encoding="utf-8") as f:
         config = json.load(f)
 
     working_tab = driver.current_window_handle
     wait = WebDriverWait(driver, 3)
+
+    if config["run_delay_sec"]:
+        logger.debug(f"{profile_name} - waiting {config['run_delay_sec']} sec")
+        time.sleep(config["run_delay_sec"])
+
+    close_all_other_tabs(driver, working_tab)
 
     # General settings
     driver.get(f'chrome-extension://{config["extension_id"]}/options/index.html#/general')

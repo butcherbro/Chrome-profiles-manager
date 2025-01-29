@@ -43,15 +43,5 @@ def main():
             continue
 
 
-def main_debug():
-    chrome.run_scripts(
-        str(1),
-        ['agent_switcher', 'omega_proxy_setup'],
-    )
-
-
 if __name__ == '__main__':
-    chrome = Chrome()
-    manager = Manager()
-    # main_debug()
     main()
