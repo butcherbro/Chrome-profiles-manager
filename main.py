@@ -15,13 +15,13 @@ logger.add("data/debug_log.log", level="DEBUG", format=log_format)
 
 def main():
     main_activities_list = {
-        '📖 просмотр профилей': menu.show_all_profiles,
         '🚀 запуск профилей': menu.launch_multiple_profiles,
-        '🤖 прогон chrome скриптов': menu.run_chrome_scripts_on_multiple_profiles,
-        '🤖 прогон manager скриптов': menu.run_manager_scripts_on_multiple_profiles,
-        '🆕 создание профилей': menu.create_multiple_profiles,
-        '🧩 работа с расширениями': menu.manage_extensions,
+        '📖 просмотр профилей': menu.show_all_profiles,
         '🖊 задать комментарии': menu.update_comments,
+        '🤖 прогон скриптов [chrome]': menu.run_chrome_scripts_on_multiple_profiles,
+        '🤖 прогон скриптов [manager]': menu.run_manager_scripts_on_multiple_profiles,
+        '🧩 работа с расширениями': menu.manage_extensions,
+        '➕ создание профилей': menu.create_multiple_profiles,
         '🚪 выход': None
     }
 

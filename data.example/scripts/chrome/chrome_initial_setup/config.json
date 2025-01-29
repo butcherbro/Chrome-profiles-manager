@@ -1,0 +1,6 @@
+{
+    "run_delay_sec": 3,
+    "startup_settings": {
+      "remember_tabs": { "human_name": "запоминать вкладки последней сессии", "value": false }
+    }
+}
