@@ -3,15 +3,3 @@ general_config = {
     'new_profiles_initial_setup': True
 }
 
-automation_config = {
-    'initial_setup': {
-
-    },
-    'agent_switcher': {
-
-    },
-    'omega_proxy_setup': {
-
-    }
-}
-

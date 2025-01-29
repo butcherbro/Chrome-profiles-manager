@@ -1,1 +1,0 @@
-# https://chromewebstore.google.com/detail/random-user-agent-switche/einpaelgookohagofgnnkcfjbkkgepnp?pli=1

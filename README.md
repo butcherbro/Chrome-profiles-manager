@@ -1,15 +1,16 @@
 - [x] Scripts running sync
-- [ ] Fingerprints
-- [ ] Test proxy
+- [x] Fingerprints
+- [x] Test proxy
 - [x] Check logging
 - [ ] Rabby import script
 - [ ] Ctrl + C -> quit
-- [ ] не удалось включить память на вкладки
-- [ ] не удалось обновить настройки приватности
-- [ ] имя профиля
 - [x] по порядку скрипты выполнять
 - [ ] async extension copy
 - [ ] delete profile comments upon creation new one
+
+- [ ] tabs memory debug
+- [ ] profile name set debug
+- [ ] custom click and send_keys class
 
 - [ ] chmod +x chromedriver
 

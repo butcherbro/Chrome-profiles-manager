@@ -1,20 +1,28 @@
+import os
 import time
-from lib2to3.pgen2 import driver
+import json
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import Select
+from loguru import logger
+
+from .utils import parse_proxy, js_click, close_all_other_tabs
 
 
-EXTENSION_ID: str = 'padekgcemlokbadohgkifijomclgjgif'
-proxy = 'https://user:password@host:8000'
+def omega_proxy_setup(profile_name: str | int, script_data_path: str, _driver: webdriver.Chrome) -> None:
+    with open(os.path.join(script_data_path, 'config.json'), 'r') as f:
+        config = json.load(f)
 
-def omega_proxy_setup(name: str | int, _driver: webdriver.Chrome) -> None:
+    proxy = get_proxy_by_profile_name(profile_name, script_data_path)
+    if not proxy:
+        raise Exception('прокси не найден')
+
     working_tab = _driver.current_window_handle
 
-    _driver.get(f'chrome-extension://{EXTENSION_ID}/options.html#!/profile/proxy')
+    _driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/profile/proxy')
     wait = WebDriverWait(_driver, 3)
 
     # Skip tour
@@ -25,11 +33,11 @@ def omega_proxy_setup(name: str | int, _driver: webdriver.Chrome) -> None:
     except:
         pass
 
-    # TODO: proto selection
-
     # Set proxy
     proto, user, password, host, port = parse_proxy(proxy)
-    proto_select = wait.until(EC.element_to_be_clickable((By.XPATH, '//select[@ng-model="proxyEditors[scheme].scheme"]/option[@label="DIRECT"]/..')))
+    proto_select_options = ['DIRECT', 'HTTP', 'HTTPS', 'SOCKS4', 'SOCKS5']
+    proto_select = Select(wait.until(EC.element_to_be_clickable((By.XPATH, '//select[@ng-model="proxyEditors[scheme].scheme"]/option[@label="DIRECT"]/..'))))
+    proto_select.select_by_index(proto_select_options.index(proto.upper()))
 
     host_input = wait.until(EC.element_to_be_clickable((By.XPATH, '//input[@ng-model="proxyEditors[scheme].host"]')))
     close_all_other_tabs(_driver, working_tab)
@@ -66,7 +74,7 @@ def omega_proxy_setup(name: str | int, _driver: webdriver.Chrome) -> None:
     js_click(_driver, apply_changes_btn)
 
     # Turn it on
-    _driver.get(f'chrome-extension://{EXTENSION_ID}/options.html#!/ui')
+    _driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/ui')
 
     dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, '//div[@on-toggle="toggled(open)"]')))
     close_all_other_tabs(_driver, working_tab)
@@ -82,7 +90,7 @@ def omega_proxy_setup(name: str | int, _driver: webdriver.Chrome) -> None:
     js_click(_driver, apply_changes_btn)
 
     # Turn off notifications
-    _driver.get(f'chrome-extension://{EXTENSION_ID}/options.html#!/general')
+    _driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/general')
 
     input_element = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Show count of failed web requests for resources in the current tab.')]/../input[contains(@class, 'ng-empty') or contains(@class, 'ng-not-empty')]")))
     if 'ng-not-empty' in input_element.get_attribute('class'):
@@ -95,24 +103,15 @@ def omega_proxy_setup(name: str | int, _driver: webdriver.Chrome) -> None:
         js_click(_driver, apply_changes_btn)
 
 
-def close_all_other_tabs(_driver: webdriver.Chrome, current_tab: str) -> None:
-    for handle in _driver.window_handles:
-        if handle != current_tab:
-            _driver.switch_to.window(handle)
-            _driver.close()
+def get_proxy_by_profile_name(profile_name: str | int, script_data_path: str) -> str | None:
+    with open(os.path.join(script_data_path, 'proxies.txt'), 'r') as f:
+        proxies_data = [i.strip() for i in f.readlines()]
 
-    _driver.switch_to.window(current_tab)
+    selected_proxy = None
+    for line in proxies_data:
+        name, _proxy = line.split('|')
+        if name == str(profile_name):
+            selected_proxy = _proxy
+            break
 
-
-def js_click(_driver: webdriver.Chrome, element: WebElement) -> None:
-    _driver.execute_script("arguments[0].click();", element)
-
-
-def parse_proxy(_proxy: str) -> tuple[str, str, str, str, str]:
-    proto = _proxy.split('://')[0]
-    user = _proxy.split('://')[1].split(':')[0]
-    password = _proxy.split('@')[0].split(':')[-1]
-    host = _proxy.split('@')[1].split(':')[0]
-    port = _proxy.split('@')[1].split(':')[1]
-
-    return proto, user, password, host, port
+    return selected_proxy
