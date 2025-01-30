@@ -12,7 +12,7 @@
 🔥 Связь с создателем: [@CryptoBusher](https://t.me/CryptoBusher)
 
 <p align="left">
-  <img src="assets/demo.gif" width="300" alt="Демонстрация работыF" style="border: 1px solid #ccc; border-radius: 5px;">
+  <img src="assets/demo.gif" width="500" alt="Демонстрация работыF" style="border: 1px solid #ccc; border-radius: 5px;">
 </p>
 
 ## ⌛ Роадмап
