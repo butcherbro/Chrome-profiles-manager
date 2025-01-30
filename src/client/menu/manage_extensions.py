@@ -19,7 +19,7 @@ def manage_extensions():
         choices=[
             '🟢 добавить дефолтные без замены',
             '🔴 добавить дефолтные с заменой',
-            '❌ удалить расширения',
+            '❌  удалить расширения',
             '🏠 назад в меню'
         ],
         style=custom_style
@@ -86,7 +86,7 @@ def add_default_extensions(selected_profiles: list[str], replace=False) -> None:
 
                     added_something = True
                 except Exception as e:
-                    logger.error(f'⛔ {profile} - не удалось добавить расширение {ext_id}')
+                    logger.error(f'⛔  {profile} - не удалось добавить расширение {ext_id}')
                     logger.debug(f'{profile} - не удалось добавить расширение {ext_id}, причина: {e}')
             else:
                 if os.path.exists(dest_path):
@@ -97,11 +97,11 @@ def add_default_extensions(selected_profiles: list[str], replace=False) -> None:
                         logger.debug(f'{profile} - добавлено расширение {ext_id}')
                         added_something = True
                     except Exception as e:
-                        logger.error(f'⛔ {profile} - не удалось добавить расширение {ext_id}')
+                        logger.error(f'⛔  {profile} - не удалось добавить расширение {ext_id}')
                         logger.debug(f'{profile} - не удалось добавить расширение {ext_id}, причина: {e}')
 
         if added_something:
-            logger.info(f'✅ {profile} - расширения добавлены')
+            logger.info(f'✅  {profile} - расширения добавлены')
 
 
 def remove_extensions(selected_profiles: list[str]) -> None:
@@ -139,11 +139,11 @@ def remove_extensions(selected_profiles: list[str]) -> None:
                     logger.debug(f'{profile} - расширение {ext_id} удалено')
                     removed_something = True
             except Exception as e:
-                logger.error(f'⛔ {profile} - не удалоcь удалить расширение {ext_id}')
+                logger.error(f'⛔  {profile} - не удалоcь удалить расширение {ext_id}')
                 logger.debug(f'{profile} - не удалоcь удалить расширение {ext_id}, причина: {e}')
 
         if removed_something:
-            logger.info(f'✅ {profile} - расширения удалены')
+            logger.info(f'✅  {profile} - расширения удалены')
 
 
 def get_profiles_extensions_info(profiles_list) -> dict[str, str]:

@@ -21,7 +21,7 @@ def update_comments():
     result = set_comments_for_profiles(selected_profiles, new_comment)
 
     if result["success"]:
-        logger.info("✅ Комментарии обновлены")
+        logger.info("✅  Комментарии обновлены")
     else:
         logger.warning(f"⚠️ Не удалось обновить комментарии, причина: {result["description"]}")
 

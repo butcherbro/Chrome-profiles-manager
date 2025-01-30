@@ -8,7 +8,7 @@ from src.client.menu.utils.helpers import custom_style
 def select_profiles() -> list[str] | None:
     profiles_list_sorted = get_all_sorted_profiles()
     if not profiles_list_sorted:
-        logger.error("⛔ Профили отсутствуют")
+        logger.error("⛔  Профили отсутствуют")
         return
 
     select_options = [
@@ -54,7 +54,13 @@ def select_profiles() -> list[str] | None:
         ).ask()
 
         for profile in profiles_list_sorted:
-            comments = get_comments_for_profiles()
+            result = get_comments_for_profiles()
+            if result["success"]:
+                comments = result["comments"]
+            else:
+                logger.warning(f"⚠️ Не удалось загрузить комментарии, причина: {result["description"]}")
+                comments = {}
+
             comment = comments.get(profile, '')
             if comment_substring.lower() in comment.lower():
                 selected_profiles.append(profile)

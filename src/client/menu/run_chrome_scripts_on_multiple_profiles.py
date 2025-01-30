@@ -34,13 +34,13 @@ def run_chrome_scripts_on_multiple_profiles():
         shuffle_choice = questionary.select(
             "Рандомить порядок выполнения скриптов?",
             choices=[
-                '✅ да',
-                '❌ нет'
+                '✅  да',
+                '❌  нет'
             ],
             style=custom_style
         ).ask()
 
-        if shuffle_choice == '✅ да':
+        if 'да' in shuffle_choice:
             shuffle(chosen_scripts)
 
     for name in selected_profiles:

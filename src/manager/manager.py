@@ -26,8 +26,8 @@ class Manager:
                     profile_name,
                     script_data_path
                 )
-                logger.info(f'✅ {profile_name} - скрипт "{human_name}" выполнен')
+                logger.info(f'✅  {profile_name} - скрипт "{human_name}" выполнен')
             except Exception as e:
                 human_name = self.scripts[script]['human_name']
-                logger.error(f'⛔ {profile_name} - скрипт "{human_name}" завершен с ошибкой')
+                logger.error(f'⛔  {profile_name} - скрипт "{human_name}" завершен с ошибкой')
                 logger.debug(f'{profile_name} - скрипт "{human_name}" завершен с ошибкой, причина: {e}')

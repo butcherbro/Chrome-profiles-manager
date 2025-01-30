@@ -43,11 +43,11 @@ class Chrome:
 
             set_comments_for_profiles(profile_name, "")  # reset comment
 
-            logger.info(f'✅ {profile_name} - профиль создан')
+            logger.info(f'✅  {profile_name} - профиль создан')
         except FileExistsError:
             logger.warning(f'⚠️ {profile_name} - профиль уже существует')
         except Exception as e:
-            logger.error(f'❌️ {profile_name} - не удалось создать профиль')
+            logger.error(f'⛔  {profile_name} - не удалось создать профиль')
             logger.debug(f'{profile_name} - не удалось создать профиль, причина: {e}')
 
     def init_profile_preferences(self, profile_name: str) -> bool:
@@ -59,9 +59,9 @@ class Chrome:
             with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
                 chrome_process = subprocess.Popen([CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
 
-            logger.info(f'✅ {profile_name} - профиль запущен')
+            logger.info(f'✅  {profile_name} - профиль запущен')
         except Exception as e:
-            logger.error(f'❌ {profile_name} - не удалось запустить профиль для инициализации настроек')
+            logger.error(f'⛔  {profile_name} - не удалось запустить профиль для инициализации настроек')
             logger.debug(f'{profile_name} - не удалось запустить профиль для инициализации настроек, причина: {e}')
             return initialized
 
@@ -72,7 +72,7 @@ class Chrome:
             chrome_process.wait()
             logger.debug(f'{profile_name} - профиль закрыт')
         except Exception as e:
-            logger.error(f'❌ {profile_name} - не удалось закрыть профиль')
+            logger.error(f'⛔  {profile_name} - не удалось закрыть профиль')
             logger.debug(f'{profile_name} - не удалось закрыть профиль, причина: {e}')
 
         return initialized
@@ -84,11 +84,11 @@ class Chrome:
             with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
                 chrome_process = subprocess.Popen([CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
 
-            logger.info(f'✅ {profile_name} - профиль запущен')
+            logger.info(f'✅  {profile_name} - профиль запущен')
 
             return chrome_process
         except Exception as e:
-            logger.error(f'❌ {profile_name} - не удалось запустить профиль')
+            logger.error(f'⛔  {profile_name} - не удалось запустить профиль')
             logger.debug(f'{profile_name} - не удалось запустить профиль, причина: {e}')
 
     def run_scripts(self, profile_name: str, scripts_list: list[str]) -> None:
@@ -114,14 +114,14 @@ class Chrome:
                         script_data_path,
                         driver
                     )
-                    logger.info(f'✅ {profile_name} - скрипт "{human_name}" выполнен')
+                    logger.info(f'✅  {profile_name} - скрипт "{human_name}" выполнен')
                 except Exception as e:
                     human_name = self.scripts[script]['human_name']
-                    logger.error(f'❌ {profile_name} - скрипт "{human_name}" завершен с ошибкой')
+                    logger.error(f'⛔  {profile_name} - скрипт "{human_name}" завершен с ошибкой')
                     logger.debug(f'{profile_name} - скрипт "{human_name}" завершен с ошибкой, причина: {e}')
 
         except Exception as e:
-            logger.error(f'❌ {profile_name} - не удалось запустить профиль, выполнение скриптов прервано')
+            logger.error(f'⛔  {profile_name} - не удалось запустить профиль, выполнение скриптов прервано')
             logger.debug(f'{profile_name} - не удалось запустить профиль, причина: {e}')
             return
 
@@ -133,7 +133,7 @@ class Chrome:
             chrome_process.wait()
             logger.debug(f'{profile_name} - профиль закрыт')
         except Exception as e:
-            logger.error(f'❌ {profile_name} - не удалось закрыть профиль')
+            logger.error(f'⛔  {profile_name} - не удалось закрыть профиль')
             logger.debug(f'{profile_name} - не удалось закрыть профиль, причина: {e}')
 
     def __establish_debug_port_connection(self, profile_name) -> webdriver.Chrome:
