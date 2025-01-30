@@ -21,7 +21,7 @@ def main():
         '🤖 прогон скриптов [chrome]': menu.run_chrome_scripts_on_multiple_profiles,
         '🤖 прогон скриптов [manager]': menu.run_manager_scripts_on_multiple_profiles,
         '🧩 работа с расширениями': menu.manage_extensions,
-        '➕ создание профилей': menu.create_multiple_profiles,
+        '➕  создание профилей': menu.create_multiple_profiles,
         '🚪 выход': None
     }
 
