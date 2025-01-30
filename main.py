@@ -17,7 +17,7 @@ def main():
     main_activities_list = {
         '🚀 запуск профилей': menu.launch_multiple_profiles,
         '📖 просмотр профилей': menu.show_all_profiles,
-        '🖊 задать комментарии': menu.update_comments,
+        '📝 задать комментарии': menu.update_comments,
         '🤖 прогон скриптов [chrome]': menu.run_chrome_scripts_on_multiple_profiles,
         '🤖 прогон скриптов [manager]': menu.run_manager_scripts_on_multiple_profiles,
         '🧩 работа с расширениями': menu.manage_extensions,
@@ -32,7 +32,7 @@ def main():
             style=menu.custom_style
         ).ask()
 
-        if not main_activity or main_activity == '🚪 выход':
+        if not main_activity or 'выход' in main_activity:
             logger.info("Работа завершена")
             exit(0)
 

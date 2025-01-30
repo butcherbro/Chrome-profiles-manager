@@ -8,9 +8,9 @@ from .utils import custom_style
 
 def create_multiple_profiles() -> None:
     create_methods = [
-        '🖐 задать вручную',
+        '📝 задать вручную',
         '🤖 задать автоматически',
-        '⬅️ назад'
+        '🏠 назад в меню'
     ]
 
     create_method = questionary.select(
@@ -23,14 +23,14 @@ def create_multiple_profiles() -> None:
         logger.warning("⚠️ Активность не выбрана")
         return
 
-    if create_method == '⬅️ назад':
+    if 'назад в меню' in create_method:
         return
 
     existing_profile_names = get_profiles_list()
 
     profiles_to_create = []
 
-    if create_method == '🖐 задать вручную':
+    if 'задать вручную' in create_method:
         selected_names = questionary.text(
             "Впиши названия профилей через запятую\n",
             style=custom_style
@@ -43,7 +43,7 @@ def create_multiple_profiles() -> None:
 
         profiles_to_create = [item for item in selected_names if item not in names_to_skip]
 
-    elif create_method == '🤖 задать автоматически':
+    elif 'задать автоматически' in create_method:
         amount = questionary.text(
             "Впиши количество профилей для создания\n",
             style=custom_style

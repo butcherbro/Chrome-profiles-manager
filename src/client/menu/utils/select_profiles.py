@@ -13,10 +13,10 @@ def select_profiles() -> list[str] | None:
 
     select_options = [
         '📋 выбрать из списка',
-        '🖐 вписать названия',
+        '📝 вписать названия',
         '📒 выбрать по комментарию',
         '📦 выбрать все',
-        '⬅️ назад'
+        '🏠 назад в меню'
     ]
 
     select_method = questionary.select(
@@ -25,14 +25,14 @@ def select_profiles() -> list[str] | None:
         style=custom_style
     ).ask()
 
-    if select_method == '⬅️ назад':
+    if 'назад в меню' in select_method:
         return
 
     selected_profiles = []
-    if select_method == '📋 выбрать из списка':
+    if 'выбрать из списка' in select_method:
         selected_profiles = paginate_profiles(profiles_list_sorted)
 
-    elif select_method == '🖐 вписать названия':
+    elif 'вписать названия' in select_method:
         names_raw = questionary.text(
             "Впиши названия профилей через запятую\n",
             style=custom_style
@@ -47,7 +47,7 @@ def select_profiles() -> list[str] | None:
 
         selected_profiles = [name for name in names if name not in names_to_skip]
 
-    elif select_method == '📒 выбрать по комментарию':
+    elif 'выбрать по комментарию' in select_method:
         comment_substring = questionary.text(
             "Впиши текст, который должен содержать комментарий\n",
             style=custom_style
@@ -59,7 +59,7 @@ def select_profiles() -> list[str] | None:
             if comment_substring.lower() in comment.lower():
                 selected_profiles.append(profile)
 
-    elif select_method == '📦 выбрать все':
+    elif 'выбрать все' in select_method:
         selected_profiles = profiles_list_sorted
 
     if not selected_profiles:
