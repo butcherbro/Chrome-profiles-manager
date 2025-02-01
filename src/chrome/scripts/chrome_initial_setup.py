@@ -236,21 +236,15 @@ def adjust_tabs_memorizing(name: str | int, driver: webdriver.Chrome, working_ta
             "settings-on-startup-page"
         ]
 
-        options = [
-            'Open the New Tab page',
-            'Continue where you left off',
-            'Open a specific page or set of pages'
-        ]
-
         driver.get('chrome://settings/onStartup')
         time.sleep(0.5)
 
         final_sr = dive_into_shadowroots(driver, host_tags)
 
         if remember:
-            chosen_option = final_sr.find_element(By.CSS_SELECTOR, f"controlled-radio-button[label='{options[1]}']")
+            chosen_option = final_sr.find_element(By.CSS_SELECTOR, f"controlled-radio-button[name='1']")
         else:
-            chosen_option = final_sr.find_element(By.CSS_SELECTOR, f"controlled-radio-button[label='{options[0]}']")
+            chosen_option = final_sr.find_element(By.CSS_SELECTOR, f"controlled-radio-button[name='5']")
 
         close_all_other_tabs(driver, working_tab)
         js_click(driver, chosen_option)
