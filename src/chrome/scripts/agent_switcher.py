@@ -1,6 +1,7 @@
 import os
 import time
 import json
+from pathlib import Path
 
 from selenium import webdriver
 from selenium.webdriver.remote.webelement import WebElement
@@ -12,7 +13,7 @@ from loguru import logger
 from .utils import js_click, close_all_other_tabs
 
 
-def agent_switcher(profile_name: str | int, script_data_path: str, driver: webdriver.Chrome):
+def agent_switcher(profile_name: str | int, script_data_path: str | Path, driver: webdriver.Chrome):
     with open(os.path.join(script_data_path, 'config.json'), 'r', encoding="utf-8") as f:
         config = json.load(f)
 

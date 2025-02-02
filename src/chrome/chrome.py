@@ -30,6 +30,10 @@ class Chrome:
             'agent_switcher': {
                 'human_name': 'Настройка Agent Switcher',
                 'method': agent_switcher
+            },
+            'rabby_import': {
+                'human_name': 'Импорт Rabby Wallet',
+                'method': rabby_import
             }
         }
 

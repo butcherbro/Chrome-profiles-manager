@@ -1,6 +1,7 @@
 import os
 import time
 import json
+from pathlib import Path
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -9,18 +10,21 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from loguru import logger
 
-from .utils import parse_proxy, js_click, close_all_other_tabs
+from .utils import parse_proxy, js_click, close_all_other_tabs, get_txt_line_by_profile_name
 
 
-def omega_proxy_setup(profile_name: str | int, script_data_path: str, driver: webdriver.Chrome) -> None:
+def omega_proxy_setup(profile_name: str | int, script_data_path: str | Path, driver: webdriver.Chrome) -> None:
     with open(os.path.join(script_data_path, 'config.json'), 'r') as f:
         config = json.load(f)
 
-    proxy = get_proxy_by_profile_name(profile_name, script_data_path)
-    if not proxy:
+    proxies_file_path = os.path.join(script_data_path, 'proxies.txt')
+    profile_data = get_txt_line_by_profile_name(profile_name, proxies_file_path)
+    if not profile_data:
         raise Exception('прокси не найден')
+    proxy = profile_data.split('|')[1]
 
     working_tab = driver.current_window_handle
+    wait = WebDriverWait(driver, 3)
 
     if config["run_delay_sec"]:
         logger.debug(f"{profile_name} - waiting {config['run_delay_sec']} sec")
@@ -29,7 +33,6 @@ def omega_proxy_setup(profile_name: str | int, script_data_path: str, driver: we
     close_all_other_tabs(driver, working_tab)
 
     driver.get(f'chrome-extension://{config["extension_id"]}/options.html#!/profile/proxy')
-    wait = WebDriverWait(driver, 3)
 
     # Skip tour
     try:
