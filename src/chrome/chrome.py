@@ -54,7 +54,7 @@ class Chrome:
         initialized = False
 
         try:
-            launch_args = self.__create_launch_flags(profile_name, False)
+            launch_args = self.__create_launch_flags(profile_name, False, False, False)
 
             with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
                 chrome_process = subprocess.Popen([CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
@@ -77,9 +77,13 @@ class Chrome:
 
         return initialized
 
-    def launch_profile(self, profile_name: str, debug=False) -> subprocess.Popen | None:
+    def launch_profile(self,
+                       profile_name: str,
+                       debug=False,
+                       headless: bool = False,
+                       maximized: bool = False) -> subprocess.Popen | None:
         try:
-            launch_args = self.__create_launch_flags(profile_name, debug)
+            launch_args = self.__create_launch_flags(profile_name, debug, headless, maximized)
 
             with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
                 chrome_process = subprocess.Popen([CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
@@ -91,9 +95,9 @@ class Chrome:
             logger.error(f'⛔  {profile_name} - не удалось запустить профиль')
             logger.debug(f'{profile_name} - не удалось запустить профиль, причина: {e}')
 
-    def run_scripts(self, profile_name: str, scripts_list: list[str]) -> None:
+    def run_scripts(self, profile_name: str, scripts_list: list[str], headless: bool = False) -> None:
         try:
-            chrome_process = self.launch_profile(profile_name, True)
+            chrome_process = self.launch_profile(profile_name, True, headless, True)
             if not chrome_process:
                 raise Exception('не удалось запустить браузер')
 
@@ -146,7 +150,11 @@ class Chrome:
 
         return driver
 
-    def __create_launch_flags(self, profile_name: str, debug: bool = False) -> list[str]:
+    def __create_launch_flags(self,
+                              profile_name: str,
+                              debug: bool = False,
+                              headless: bool = False,
+                              maximized: bool = False) -> list[str]:
         profile_path = self.__get_profile_path(profile_name)
         profile_extensions_path = os.path.join(profile_path, "Extensions")
         profile_html_path = self.__get_profile_welcome_page(profile_name)
@@ -170,8 +178,12 @@ class Chrome:
             f"file:///{profile_html_path}",
             "--no-sync",
             "--disable-features=IdentityConsistency",
-            "--disable-accounts-receiver"
+            "--disable-accounts-receiver",
+            "--headless" if headless else None,
+            "--start-maximized" if maximized else None
         ]
+
+        flags = [i for i in flags if i is not None]
 
         if debug:
             free_port = self.__find_free_port()

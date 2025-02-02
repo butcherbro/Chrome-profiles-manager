@@ -43,8 +43,20 @@ def run_chrome_scripts_on_multiple_profiles():
         if 'да' in shuffle_choice:
             shuffle(chosen_scripts)
 
+    headless_choice = questionary.select(
+        "Использовать Headless Mode?",
+        choices=[
+            '✅  да',
+            '❌  нет'
+        ],
+        style=custom_style
+    ).ask()
+
+    headless = True if 'да' in headless_choice else False
+
     for name in selected_profiles:
         chrome.run_scripts(
             str(name),
-            chosen_scripts
+            chosen_scripts,
+            headless
         )

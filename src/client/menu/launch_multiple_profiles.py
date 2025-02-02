@@ -10,14 +10,12 @@ def launch_multiple_profiles():
         return
 
     chrome = Chrome()
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = []
-        for name in selected_profiles:
-            futures.append(executor.submit(
-                chrome.launch_profile,
-                str(name),
-                False
-            ))
 
-        for future in concurrent.futures.as_completed(futures):
-            future.result()
+    for name in selected_profiles:
+        chrome.launch_profile(
+            str(name),
+            debug=False,
+            headless=False,
+            maximized=False
+        )
+
