@@ -4,6 +4,7 @@ import questionary
 from loguru import logger
 
 import src.client.menu as menu
+from src.utils.helpers import kill_chrome_processes
 from config import general_config
 
 logger.remove()
@@ -21,7 +22,8 @@ def main():
         '🤖 прогон скриптов [chrome]': menu.run_chrome_scripts_on_multiple_profiles,
         '🤖 прогон скриптов [manager]': menu.run_manager_scripts_on_multiple_profiles,
         '🧩 работа с расширениями': menu.manage_extensions,
-        '➕  создание профилей': menu.create_multiple_profiles,
+        '➕ создание профилей': menu.create_multiple_profiles,
+        '💀 убить процессы Chrome': kill_chrome_processes,
         '🚪 выход': None
     }
 

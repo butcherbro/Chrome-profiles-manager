@@ -1,3 +1,4 @@
+from time import sleep
 import concurrent.futures
 
 from src.chrome.chrome import Chrome
@@ -18,4 +19,6 @@ def launch_multiple_profiles():
             headless=False,
             maximized=False
         )
+
+        sleep(1)
 
