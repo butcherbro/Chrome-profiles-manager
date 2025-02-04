@@ -88,6 +88,31 @@ def copy_extension(src_path: str, dest_path: str, profile: str | int, ext_id: st
                 return False
 
 
+def remove_extensions(profile: str | int, ext_ids: list[str]) -> None:
+    extensions_path = os.path.join(CHROME_DATA_PATH, f"Profile {profile}", "Extensions")
+    extensions_settings_path = os.path.join(CHROME_DATA_PATH, f"Profile {profile}", "Local Extension Settings")
+
+    for ext_id in ext_ids:
+        ext_path = os.path.join(extensions_path, ext_id)
+        ext_settings_path = os.path.join(extensions_settings_path, ext_id)
+
+        try:
+            if os.path.isdir(ext_path):
+                shutil.rmtree(ext_path)
+                logger.info(f'{profile} - расширение {ext_id} удалено')
+        except Exception as e:
+            logger.error(f'⛔  {profile} - не удалоcь удалить расширение {ext_id}')
+            logger.debug(f'{profile} - не удалоcь удалить  расширение {ext_id}, причина: {e}')
+
+        try:
+            if os.path.isdir(ext_settings_path):
+                shutil.rmtree(ext_settings_path)
+                logger.info(f'{profile} - локальные настройки расширения {ext_id} удалены')
+        except Exception as e:
+            logger.error(f'⛔  {profile} - не удалоcь удалить локальные настройки расширения {ext_id}')
+            logger.debug(f'{profile} - не удалоcь удалить локальные настройки расширения {ext_id}, причина: {e}')
+
+
 def get_all_default_extensions_info() -> dict:
     extensions_info = {}
     default_extensions_path = os.path.join(PROJECT_PATH, "data", "default_extensions")
@@ -105,14 +130,23 @@ def get_profiles_extensions_info(profiles_list) -> dict[str, str]:
     for profile in profiles_list:
         profile_path = os.path.join(PROJECT_PATH, "data", "profiles", f"Profile {profile}")
         extensions_path = os.path.join(profile_path, "Extensions")
-        if not os.path.isdir(extensions_path):
+        extensions_settings_path = os.path.join(profile_path, "Local Extension Settings")
+        if not os.path.isdir(extensions_path) and not os.path.isdir(extensions_settings_path):
             continue
 
-        for extension_id in os.listdir(extensions_path):
-            extension_path = os.path.join(extensions_path, extension_id)
-            if os.path.isdir(extension_path):
-                name = get_extension_name(extension_path)
-                extensions_info[extension_id] = name
+        if os.path.exists(extensions_path):
+            for extension_id in os.listdir(extensions_path):
+                extension_path = os.path.join(extensions_path, extension_id)
+                if os.path.isdir(extension_path):
+                    name = get_extension_name(extension_path)
+                    extensions_info[extension_id] = name
+
+        if os.path.exists(extensions_settings_path):
+            for extension_id in os.listdir(extensions_settings_path):
+                extension_settings_path = os.path.join(extensions_settings_path, extension_id)
+                if os.path.isdir(extension_settings_path):
+                    if extensions_info.get(extension_id) is None:
+                        extensions_info[extension_id] = ''
 
     return extensions_info
 

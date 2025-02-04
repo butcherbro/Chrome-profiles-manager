@@ -7,7 +7,10 @@ import questionary
 from loguru import logger
 
 from config import general_config
-from src.utils.helpers import get_all_default_extensions_info, get_profiles_extensions_info, copy_extension
+from src.utils.helpers import (get_all_default_extensions_info,
+                               get_profiles_extensions_info,
+                               copy_extension,
+                               remove_extensions)
 from src.utils.constants import *
 from .utils import select_profiles, custom_style
 
@@ -36,7 +39,7 @@ def manage_extensions():
     elif 'добавить дефолтные с заменой' in extension_activity:
         add_default_extensions(selected_profiles, True)
     elif 'удалить расширения' in extension_activity:
-        remove_extensions(selected_profiles)
+        remove_extensions_menu(selected_profiles)
     else:
         logger.warning('⚠️ Действие с расширениями не выбрано')
         return
@@ -77,8 +80,9 @@ def add_default_extensions(selected_profiles: list[str], replace=False) -> None:
                 futures.append(executor.submit(copy_extension, src_path, dest_path, profile, ext_id, replace))
 
 
-def remove_extensions(selected_profiles: list[str]) -> None:
+def remove_extensions_menu(selected_profiles: list[str]) -> None:
     profiles_extension_info = get_profiles_extensions_info(selected_profiles)
+
     if not profiles_extension_info:
         logger.warning('⚠️ Расширения в профилях не найдены')
         return
@@ -101,19 +105,7 @@ def remove_extensions(selected_profiles: list[str]) -> None:
         return
 
     for profile in selected_profiles:
-        removed_something = False
+        remove_extensions(profile, selected_ids)
 
-        extensions_path = os.path.join(PROJECT_PATH, "data", "profiles", f"Profile {profile}", "Extensions")
-        for ext_id in selected_ids:
-            try:
-                ext_path = os.path.join(extensions_path, ext_id)
-                if os.path.isdir(ext_path):
-                    shutil.rmtree(ext_path)
-                    logger.debug(f'{profile} - расширение {ext_id} удалено')
-                    removed_something = True
-            except Exception as e:
-                logger.error(f'⛔  {profile} - не удалоcь удалить расширение {ext_id}')
-                logger.debug(f'{profile} - не удалоcь удалить расширение {ext_id}, причина: {e}')
 
-        if removed_something:
-            logger.info(f'✅  {profile} - расширения удалены')
+
