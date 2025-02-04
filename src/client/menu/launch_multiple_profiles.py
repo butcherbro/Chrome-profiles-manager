@@ -20,5 +20,5 @@ def launch_multiple_profiles():
             maximized=False
         )
 
-        sleep(1)
+        sleep(0.5)
 
