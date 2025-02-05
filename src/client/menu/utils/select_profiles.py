@@ -1,3 +1,4 @@
+import re
 import questionary
 from loguru import logger
 
@@ -38,7 +39,7 @@ def select_profiles() -> list[str] | None:
             style=custom_style
         ).ask()
 
-        names = list(set(i.strip() for i in names_raw.split(',') if i.strip()))
+        names = list(set(i.strip() for i in re.split(r'[\n,]+', names_raw) if i.strip()))
         existing_profile_names = get_profiles_list()
         names_to_skip = [name for name in names if name not in existing_profile_names]
 
