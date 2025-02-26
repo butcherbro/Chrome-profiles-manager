@@ -1,0 +1,1 @@
+"""Windows package for Chrome Profiles Manager GUI""" 

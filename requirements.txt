@@ -1,0 +1,45 @@
+# Основные библиотеки
+questionary==2.1.0
+selenium==4.28.1
+loguru==0.6.0
+rich==13.9.4
+
+# GUI
+PyQt6==6.6.1
+PyQt6-Qt6==6.6.1
+PyQt6-sip==13.6.0
+
+# Веб-автоматизация и тестирование
+playwright==1.41.1
+pytest==7.4.3
+pytest-playwright==0.4.3
+pytest-asyncio==0.21.1
+
+# Обработка данных и форматирование
+pandas==2.1.3
+numpy==1.24.3
+openpyxl==3.1.2
+
+# Улучшение кода и безопасность
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.0
+bandit==1.7.5
+python-dotenv==1.0.0
+
+# Асинхронность и производительность
+aiohttp==3.9.1
+asyncio==3.4.3
+uvicorn==0.24.0
+
+# Мониторинг и логирование
+prometheus-client==0.19.0
+sentry-sdk==1.35.0
+
+# Утилиты для разработки
+tqdm==4.66.1
+pyinstaller==6.2.0
+python-dateutil==2.8.2
+
+# Дополнительные зависимости
+psutil==5.9.8

@@ -1,0 +1,1 @@
+"""Scripts package for Chrome Profiles Manager""" 
