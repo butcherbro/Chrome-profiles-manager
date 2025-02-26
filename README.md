@@ -14,7 +14,7 @@
 
 1. Клонируйте репозиторий:
 ```bash
-git clone https://github.com/YOUR_USERNAME/Chrome-profiles-manager.git
+git clone https://github.com/butcherbro/Chrome-profiles-manager.git
 cd Chrome-profiles-manager
 ```
 
