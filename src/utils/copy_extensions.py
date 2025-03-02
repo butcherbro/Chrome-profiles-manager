@@ -3,12 +3,14 @@ import shutil
 from pathlib import Path
 from loguru import logger
 
-from src.utils.constants import CHROME_DATA_PATH
+from src.utils.constants import CHROME_DATA_PATH, DEFAULT_EXTENSIONS_PATH
 from src.utils.helpers import get_profiles_list
 
 def copy_extensions_to_all_profiles(source_profile: str = "03"):
     """
-    Копирует расширения из исходного профиля во все остальные профили.
+    Копирует расширения из профиля 03 во все остальные профили.
+    При копировании также сохраняет расширения в папку default_extensions.
+    
     Для криптокошельков:
     - Если в целевом профиле уже есть настройки кошелька - они сохраняются
     - Если в целевом профиле нет настроек - копируется только расширение без настроек
@@ -48,6 +50,25 @@ def copy_extensions_to_all_profiles(source_profile: str = "03"):
             
         # Получаем список всех профилей
         profiles = get_profiles_list()
+        
+        # Сначала копируем расширения в default_extensions
+        logger.info("Сохраняем расширения в default_extensions...")
+        DEFAULT_EXTENSIONS_PATH.mkdir(parents=True, exist_ok=True)
+        
+        for ext_id in os.listdir(source_extensions_path):
+            if ext_id == '.gitkeep':
+                continue
+                
+            src_ext_path = source_extensions_path / ext_id
+            default_ext_path = DEFAULT_EXTENSIONS_PATH / ext_id
+            
+            # Удаляем старую версию если есть
+            if default_ext_path.exists():
+                shutil.rmtree(default_ext_path)
+            
+            # Копируем расширение с сохранением структуры
+            shutil.copytree(src_ext_path, default_ext_path, symlinks=True)
+            logger.info(f"✅ Расширение {ext_id} сохранено в default_extensions")
         
         # Копируем расширения в каждый профиль
         for profile in profiles:

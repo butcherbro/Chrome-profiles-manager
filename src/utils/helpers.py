@@ -3,11 +3,15 @@ import json
 import shutil
 import sys
 import psutil
+import subprocess
 from pathlib import Path
 
 from loguru import logger
 
 from src.utils.constants import *
+
+# ID расширений
+METAMASK_EXTENSION_ID = "nkbihfbeogaeaoehlefnkodbefgpgknn"
 
 # Глобальный список для хранения PID процессов Chrome
 chrome_processes = []
@@ -18,32 +22,33 @@ def register_chrome_process(process):
         chrome_processes.append(process.pid)
         logger.debug(f'Зарегистрирован процесс Chrome с PID {process.pid}')
 
-def kill_chrome_processes() -> None:
-    """Завершает только процессы Chrome, запущенные нашей программой"""
+def kill_chrome_processes():
+    """
+    Закрывает все процессы Chrome
+    """
     try:
-        killed = 0
-        for pid in chrome_processes[:]:  # Создаем копию списка для безопасного удаления
-            try:
-                process = psutil.Process(pid)
-                if process.is_running():
-                    process.terminate()  # Сначала пробуем мягкое завершение
-                    process.wait(timeout=3)  # Ждем 3 секунды
-                    if process.is_running():  # Если процесс все еще жив
-                        process.kill()  # Принудительное завершение
-                    killed += 1
-                chrome_processes.remove(pid)
-            except psutil.NoSuchProcess:
-                chrome_processes.remove(pid)  # Процесс уже не существует
-            except Exception as e:
-                logger.debug(f'Ошибка при завершении процесса {pid}: {str(e)}')
-                
-        if killed > 0:
-            logger.info(f'✅ Завершено процессов Chrome: {killed}')
-        else:
-            logger.info('ℹ️ Нет активных процессов Chrome для завершения')
+        # Получаем список процессов Chrome
+        ps = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE).communicate()[0]
+        processes = ps.decode().split('\n')
+        
+        # Фильтруем процессы Chrome
+        chrome_processes = [p for p in processes if 'Google Chrome' in p]
+        
+        if not chrome_processes:
+            logger.info("Нет активных процессов Chrome")
+            return
             
+        # Получаем PID процессов
+        for process in chrome_processes:
+            try:
+                pid = int(process.split()[1])
+                os.kill(pid, 9)
+                logger.info(f"Процесс Chrome (PID: {pid}) завершен")
+            except (IndexError, ValueError, ProcessLookupError) as e:
+                logger.warning(f"Не удалось завершить процесс Chrome: {e}")
+                
     except Exception as e:
-        logger.error(f'⛔ Ошибка при завершении процессов Chrome: {str(e)}')
+        logger.error(f"Ошибка при завершении процессов Chrome: {e}")
 
 
 def get_profiles_list() -> list[str]:
@@ -192,9 +197,8 @@ def remove_extensions(profile: str | int, ext_ids: list[str]) -> None:
 
 def get_all_default_extensions_info() -> dict:
     extensions_info = {}
-    default_extensions_path = os.path.join(PROJECT_PATH, "data", "default_extensions")
-    for extension_id in os.listdir(default_extensions_path):
-        extension_path = os.path.join(default_extensions_path, extension_id)
+    for extension_id in os.listdir(DEFAULT_EXTENSIONS_PATH):
+        extension_path = os.path.join(DEFAULT_EXTENSIONS_PATH, extension_id)
         if os.path.isdir(extension_path):
             name = get_extension_name(extension_path)
             extensions_info[extension_id] = name
@@ -205,25 +209,14 @@ def get_all_default_extensions_info() -> dict:
 def get_profiles_extensions_info(profiles_list) -> dict[str, str]:
     extensions_info = {}
     for profile in profiles_list:
-        profile_path = os.path.join(PROJECT_PATH, "data", "profiles", f"Profile {profile}")
+        profile_path = os.path.join(CHROME_DATA_PATH, f"Profile {profile}")
         extensions_path = os.path.join(profile_path, "Extensions")
-        extensions_settings_path = os.path.join(profile_path, "Local Extension Settings")
-        if not os.path.isdir(extensions_path) and not os.path.isdir(extensions_settings_path):
-            continue
-
         if os.path.exists(extensions_path):
             for extension_id in os.listdir(extensions_path):
                 extension_path = os.path.join(extensions_path, extension_id)
                 if os.path.isdir(extension_path):
                     name = get_extension_name(extension_path)
                     extensions_info[extension_id] = name
-
-        if os.path.exists(extensions_settings_path):
-            for extension_id in os.listdir(extensions_settings_path):
-                extension_settings_path = os.path.join(extensions_settings_path, extension_id)
-                if os.path.isdir(extension_settings_path):
-                    if extensions_info.get(extension_id) is None:
-                        extensions_info[extension_id] = ''
 
     return extensions_info
 
@@ -244,12 +237,42 @@ def get_extension_name(extension_path: str) -> str:
 
 
 def read_manifest_name(manifest_path: str) -> str:
+    """
+    Читает название расширения из manifest.json
+    
+    Args:
+        manifest_path: Путь к файлу manifest.json
+        
+    Returns:
+        str: Название расширения или пустая строка в случае ошибки
+    """
     try:
         with open(manifest_path, 'r', encoding='utf-8') as file:
             manifest = json.load(file)
-
-        return manifest.get("action", {}).get("default_title", "")
-    except (json.JSONDecodeError, OSError):
+            
+        # Проверяем разные места где может быть название
+        name = (
+            manifest.get("name") or  # Основное название
+            manifest.get("action", {}).get("default_title") or  # Chrome Manifest V3
+            manifest.get("browser_action", {}).get("default_title") or  # Chrome Manifest V2
+            manifest.get("page_action", {}).get("default_title") or  # Старый формат
+            ""  # Если ничего не нашли
+        )
+        
+        # Если название в формате локализации "__MSG_extensionName__"
+        if name.startswith("__MSG_") and name.endswith("__"):
+            msg_name = name[6:-2]  # Убираем __MSG_ и __
+            # Пытаемся найти локализацию
+            messages_path = os.path.join(os.path.dirname(manifest_path), "_locales", "en", "messages.json")
+            if os.path.exists(messages_path):
+                with open(messages_path, 'r', encoding='utf-8') as f:
+                    messages = json.load(f)
+                    name = messages.get(msg_name, {}).get("message", name)
+        
+        return name
+        
+    except Exception as e:
+        logger.error(f"⛔ Ошибка чтения manifest.json: {str(e)}")
         return ''
 
 
@@ -683,3 +706,219 @@ def format_size(size_bytes: int) -> str:
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024
     return f"{size_bytes:.1f} TB"
+
+def get_extension_version(extension_path):
+    """
+    Получает версию расширения из manifest.json
+    
+    Args:
+        extension_path (str): Путь к директории расширения
+        
+    Returns:
+        str: Версия расширения или None в случае ошибки
+    """
+    try:
+        # Получаем список версий
+        versions = os.listdir(extension_path)
+        if not versions:
+            logger.warning(f"Не найдены версии в {extension_path}")
+            return None
+            
+        # Берем последнюю версию
+        latest_version = versions[-1]
+        manifest_path = os.path.join(extension_path, latest_version, "manifest.json")
+        
+        if not os.path.exists(manifest_path):
+            logger.warning(f"manifest.json не найден в {manifest_path}")
+            return None
+            
+        # Читаем manifest.json
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+            version = manifest.get("version")
+            if version:
+                logger.info(f"Найдена версия {version}")
+                return version
+            else:
+                logger.warning("Версия не указана в manifest.json")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Ошибка при получении версии расширения: {e}")
+        return None
+
+def check_extension_permissions(extension_path):
+    """
+    Проверяет разрешения расширения в manifest.json
+    
+    Args:
+        extension_path (str): Путь к директории расширения
+        
+    Returns:
+        list: Список разрешений или None в случае ошибки
+    """
+    try:
+        # Получаем последнюю версию
+        versions = os.listdir(extension_path)
+        if not versions:
+            return None
+            
+        latest_version = versions[-1]
+        manifest_path = os.path.join(extension_path, latest_version, "manifest.json")
+        
+        if not os.path.exists(manifest_path):
+            return None
+            
+        # Читаем manifest.json
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+            permissions = manifest.get("permissions", [])
+            logger.info(f"Найдены разрешения: {permissions}")
+            return permissions
+            
+    except Exception as e:
+        logger.error(f"Ошибка при проверке разрешений: {e}")
+        return None
+
+def check_active_chrome() -> bool:
+    """Проверяет, не запущен ли Chrome"""
+    try:
+        # Получаем список процессов Chrome
+        ps = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE).communicate()[0]
+        processes = ps.decode().split('\n')
+        
+        # Фильтруем процессы Chrome
+        chrome_processes = [p for p in processes if 'Google Chrome' in p]
+        
+        if chrome_processes:
+            logger.error("❌ Chrome все еще запущен. Пожалуйста, закройте все окна Chrome")
+            return False
+            
+        logger.info("✓ Chrome не запущен")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при проверке Chrome: {e}")
+        return False
+
+def verify_metamask_extension(profile_path: str) -> bool:
+    """Проверяет наличие и состояние MetaMask"""
+    try:
+        # Проверяем расширение
+        metamask_ext = os.path.join(profile_path, "Extensions", METAMASK_EXTENSION_ID)
+        if not os.path.exists(metamask_ext):
+            logger.error("❌ MetaMask не найден")
+            return False
+            
+        # Проверяем настройки
+        metamask_settings = os.path.join(profile_path, "Local Extension Settings", METAMASK_EXTENSION_ID)
+        if not os.path.exists(metamask_settings):
+            logger.error("❌ Настройки MetaMask не найдены")
+            return False
+            
+        # Проверяем файлы данных
+        has_ldb_files = False
+        for file in os.listdir(metamask_settings):
+            if file.endswith(".ldb"):
+                has_ldb_files = True
+                break
+                
+        if not has_ldb_files:
+            logger.error("❌ Файлы данных MetaMask не найдены")
+            return False
+            
+        logger.info("✓ MetaMask проверен успешно")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при проверке MetaMask: {e}")
+        return False
+
+def update_profile_settings(profile_path: str) -> bool:
+    """Обновляет настройки профиля"""
+    try:
+        prefs_path = os.path.join(profile_path, "Preferences")
+        if not os.path.exists(prefs_path):
+            logger.error("❌ Файл Preferences не найден")
+            return False
+            
+        # Читаем текущие настройки
+        with open(prefs_path, 'r', encoding='utf-8') as f:
+            prefs = json.load(f)
+            
+        # Сохраняем важные настройки
+        extensions = prefs.get('extensions', {})
+        settings = prefs.get('extensions', {}).get('settings', {})
+        
+        # Обновляем пути в настройках MetaMask
+        if METAMASK_EXTENSION_ID in settings:
+            metamask_settings = settings[METAMASK_EXTENSION_ID]
+            if 'install_time' in metamask_settings:
+                metamask_settings['path'] = metamask_settings['path'].replace('\\', '/')
+                if 'manifest' in metamask_settings:
+                    metamask_settings['manifest']['key_path'] = metamask_settings['manifest'].get('key_path', '').replace('\\', '/')
+        
+        # Очищаем настройки
+        prefs.clear()
+        
+        # Создаем новые настройки
+        prefs.update({
+            'extensions': {
+                'settings': settings,
+                'toolbar': extensions.get('toolbar', []),
+                'pinned_extensions': extensions.get('pinned_extensions', [])
+            },
+            'profile': {
+                'name': os.path.basename(profile_path),
+                'avatar_icon': 'chrome://theme/IDR_PROFILE_AVATAR_26'
+            },
+            'browser': {
+                'enabled_labs_experiments': [],
+                'last_known_google_url': 'https://www.google.com/',
+                'last_prompted_google_url': 'https://www.google.com/'
+            }
+        })
+        
+        # Сохраняем обновленные настройки
+        with open(prefs_path, 'w', encoding='utf-8') as f:
+            json.dump(prefs, f, indent=4)
+            
+        logger.success("✅ Настройки профиля обновлены")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при обновлении настроек: {e}")
+        return False
+
+def verify_profile_adapted(profile_path: str) -> bool:
+    """Проверяет что профиль успешно адаптирован"""
+    try:
+        # Проверяем основные директории
+        required_dirs = [
+            "Extensions",
+            "Local Extension Settings",
+            "IndexedDB"
+        ]
+        
+        for dir_name in required_dirs:
+            dir_path = os.path.join(profile_path, dir_name)
+            if not os.path.exists(dir_path):
+                logger.error(f"❌ Директория {dir_name} не найдена")
+                return False
+                
+        # Проверяем MetaMask
+        if not verify_metamask_extension(profile_path):
+            return False
+            
+        # Проверяем preferences
+        prefs_path = os.path.join(profile_path, "Preferences")
+        if not os.path.exists(prefs_path):
+            logger.error("❌ Файл настроек не найден")
+            return False
+            
+        logger.success("✅ Профиль успешно адаптирован")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при проверке адаптации: {e}")
+        return False

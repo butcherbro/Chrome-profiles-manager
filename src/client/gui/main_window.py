@@ -4,12 +4,12 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from loguru import logger
+import os
 
 from src.client.menu import (
     launch_multiple_profiles,
     create_multiple_profiles,
-    kill_chrome_processes,
-    copy_extensions_to_all_profiles
+    kill_chrome_processes
 )
 from src.chrome.chrome import Chrome
 from src.manager.manager import Manager
@@ -20,6 +20,10 @@ from .windows.launch_profiles_window import LaunchProfilesWindow
 from .windows.scripts_window import ScriptsWindow
 from .windows.zenno_import_window import ZennoImportWindow
 from .windows.cache_cleanup_window import CacheCleanupWindow
+from .windows.create_profiles_window import CreateProfilesWindow
+from src.manager.extensions.downloader import ExtensionDownloader
+from src.utils.constants import DEFAULT_EXTENSIONS_PATH
+from .windows.playwright_scripts_window import PlaywrightScriptsWindow
 
 
 class MainWindow(QMainWindow):
@@ -28,6 +32,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Chrome Profiles Manager")
         self.setMinimumSize(400, 600)
+        
+        # Загружаем расширения по умолчанию если их нет
+        self.download_default_extensions()
         
         # Центральный виджет
         central_widget = QWidget()
@@ -40,16 +47,47 @@ class MainWindow(QMainWindow):
         # Создаем кнопки
         self.create_buttons(layout)
         
+    def download_default_extensions(self):
+        """Загружает необходимые расширения из Chrome Web Store или локальных файлов"""
+        try:
+            downloader = ExtensionDownloader()
+            
+            # Проверяем наличие SwitchyOmega
+            if not (DEFAULT_EXTENSIONS_PATH / "padekgcemlokbadohgkifijomclgjgif").exists():
+                logger.info("⏳ Добавление SwitchyOmega...")
+                # Сначала пробуем загрузить из магазина
+                if not downloader.download_from_store("padekgcemlokbadohgkifijomclgjgif"):
+                    # Если не получилось, ищем локальную версию
+                    local_path = DEFAULT_EXTENSIONS_PATH / "Proxy-SwitchyOmega"
+                    if local_path.exists():
+                        if downloader.add_extension(str(local_path)):
+                            logger.success("✅ SwitchyOmega успешно добавлен из локальной папки")
+                        else:
+                            logger.error("❌ Не удалось добавить SwitchyOmega из локальной папки")
+                    else:
+                        logger.error("❌ SwitchyOmega не найден ни в магазине, ни локально")
+            
+            # Проверяем наличие MetaMask
+            if not (DEFAULT_EXTENSIONS_PATH / "nkbihfbeogaeaoehlefnkodbefgpgknn").exists():
+                logger.info("⏳ Загрузка MetaMask...")
+                if downloader.download_from_store("nkbihfbeogaeaoehlefnkodbefgpgknn"):
+                    logger.success("✅ MetaMask успешно загружен")
+                else:
+                    logger.error("❌ Не удалось загрузить MetaMask")
+                    
+        except Exception as e:
+            logger.error("❌ Ошибка при загрузке расширений")
+            logger.debug(f"Причина: {str(e)}")
+        
     def create_buttons(self, layout):
         """Создание кнопок главного меню"""
         buttons_data = {
             '🚀 Запуск профилей': self.launch_profiles,
             '📖 Просмотр профилей': self.show_profiles,
             '📝 Задать комментарии': self.update_comments,
-            '🤖 Прогон скриптов [chrome]': self.run_chrome_scripts,
-            '🤖 Прогон скриптов [manager]': self.run_manager_scripts,
+            '🤖 Скрипты [Selenium]': self.run_chrome_scripts,
+            '🚀 Скрипты [Playwright]': self.run_playwright_scripts,
             '🧩 Работа с расширениями': self.manage_extensions,
-            '🔄 Копировать расширения': self.copy_extensions,
             '🗑️ Очистка кэша': self.cleanup_cache,
             '➕ Создание профилей': self.create_profiles,
             '📥 Импорт из ZennoPoster': self.import_from_zenno,
@@ -104,19 +142,11 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.show_error(f"Ошибка при запуске скриптов: {str(e)}")
     
-    def run_manager_scripts(self):
-        """Запуск скриптов для менеджера"""
+    def run_playwright_scripts(self):
+        """Открытие окна скриптов Playwright"""
         try:
-            scripts_window = ScriptsWindow(self, script_type="manager")
-            if scripts_window.exec():
-                selected_profiles = scripts_window.selected_profiles
-                selected_scripts = scripts_window.selected_scripts
-                
-                if selected_profiles and selected_scripts:
-                    manager = Manager()
-                    for name in selected_profiles:
-                        manager.run_scripts(str(name), selected_scripts)
-                    self.show_success("Скрипты успешно выполнены")
+            scripts_window = PlaywrightScriptsWindow(self)
+            scripts_window.exec()
         except Exception as e:
             self.show_error(f"Ошибка при запуске скриптов: {str(e)}")
     
@@ -128,8 +158,8 @@ class MainWindow(QMainWindow):
     def create_profiles(self):
         """Создание профилей"""
         try:
-            create_multiple_profiles()
-            self.show_success("Профили успешно созданы")
+            create_window = CreateProfilesWindow(self)
+            create_window.exec()
         except Exception as e:
             self.show_error(f"Ошибка при создании профилей: {str(e)}")
     
@@ -153,16 +183,6 @@ class MainWindow(QMainWindow):
         """Открытие окна очистки кэша"""
         cleanup_window = CacheCleanupWindow(self)
         cleanup_window.show()
-    
-    def copy_extensions(self):
-        """Копирование расширений во все профили"""
-        try:
-            if copy_extensions_to_all_profiles():
-                self.show_success("Расширения успешно скопированы во все профили")
-            else:
-                self.show_error("Не удалось скопировать расширения")
-        except Exception as e:
-            self.show_error(f"Ошибка при копировании расширений: {str(e)}")
     
     def show_success(self, message):
         """Показ сообщения об успехе"""

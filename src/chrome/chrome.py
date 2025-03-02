@@ -2,6 +2,10 @@ import subprocess
 import time
 import socket
 import os
+import json
+import psutil
+from pathlib import Path
+from typing import Optional, Dict, Any, List
 
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -15,33 +19,41 @@ from .scripts import *
 
 class Chrome:
     def __init__(self):
+        """Инициализация Chrome"""
         self.debug_ports = {}
-        self.chosen_debug_ports = []
+        self.chosen_debug_ports = {}
+        self.profiles_path = CHROME_DATA_PATH
+        self.extensions_path = DEFAULT_EXTENSIONS_PATH
 
+        # Доступные скрипты
         self.scripts = {
             'chrome_initial_setup': {
-                'human_name': 'Первичная настройка Chrome',
-                'method': chrome_initial_setup,
+                'human_name': '🌐 Настройка Chrome',
+                'function': chrome_initial_setup
             },
             'omega_proxy_setup': {
-                'human_name': 'Настройка Omega Proxy',
-                'method': omega_proxy_setup
+                'human_name': '🔧 Настройка SwitchyOmega',
+                'function': omega_proxy_setup
             },
             'agent_switcher': {
-                'human_name': 'Настройка Agent Switcher',
-                'method': agent_switcher
+                'human_name': '🔄 Смена User-Agent',
+                'function': agent_switcher
             },
             'rabby_import': {
-                'human_name': 'Импорт Rabby Wallet',
-                'method': rabby_import
+                'human_name': '🦊 Импорт кошелька Rabby',
+                'function': rabby_import
             },
             'test_profile': {
-                'human_name': 'Тестовый скрипт',
-                'method': test_profile
+                'human_name': '🧪 Тест профиля',
+                'function': test_profile
             },
             'test_uniswap': {
-                'human_name': 'Тест Uniswap',
-                'method': test_uniswap
+                'human_name': '🔁 Тест Uniswap',
+                'function': test_uniswap
+            },
+            'test_extension': {
+                'human_name': '🔌 Проверка расширения',
+                'function': test_extension
             }
         }
 
@@ -90,27 +102,81 @@ class Chrome:
 
         return initialized
 
-    def launch_profile(self,
-                       profile_name: str,
-                       debug=False,
-                       headless: bool = False,
-                       maximized: bool = False) -> subprocess.Popen | None:
+    def launch_profile(self, profile_name: str, debug: bool = False, headless: bool = False, maximized: bool = False) -> subprocess.Popen | None:
+        """
+        Запускает профиль Chrome
+
+        Args:
+            profile_name: имя профиля
+            debug: режим отладки
+            headless: безголовый режим
+            maximized: запуск в развернутом окне
+
+        Returns:
+            subprocess.Popen | None: объект процесса Chrome или None в случае ошибки
+        """
         try:
-            launch_args = self.__create_launch_flags(profile_name, debug, headless, maximized)
-            
-            # Логируем флаги запуска
-            logger.debug(f"{profile_name} - флаги запуска Chrome: {' '.join(launch_args)}")
+            flags = self.__create_launch_flags(profile_name, debug, headless, maximized)
+            logger.debug(f'{profile_name} - флаги запуска: {flags}')
 
-            with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
-                chrome_process = subprocess.Popen([CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
-                register_chrome_process(chrome_process)  # Регистрируем процесс
+            chrome_process = subprocess.Popen(
+                [CHROME_PATH, *flags],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
 
-            logger.info(f'✅  {profile_name} - профиль запущен')
-
+            logger.info(f'✅ Профиль {profile_name} успешно запущен')
             return chrome_process
+
         except Exception as e:
-            logger.error(f'⛔  {profile_name} - не удалось запустить профиль')
-            logger.debug(f'{profile_name} - не удалось запустить профиль, причина: {e}')
+            logger.error(f'⛔ Ошибка при запуске профиля {profile_name}')
+            logger.debug(f'Причина: {str(e)}')
+            return None
+
+    def _get_profile_extensions(self, profile_id: str) -> List[str]:
+        """
+        Получает список установленных расширений в профиле
+        
+        Args:
+            profile_id: ID профиля
+            
+        Returns:
+            List[str]: Список ID установленных расширений
+        """
+        try:
+            extensions_path = self.profiles_path / f"Profile {profile_id}" / "Extensions"
+            if not extensions_path.exists():
+                return []
+                
+            return [d.name for d in extensions_path.iterdir() if d.is_dir()]
+            
+        except Exception as e:
+            logger.error(f"⛔ Ошибка при получении списка расширений профиля {profile_id}")
+            logger.debug(f"Причина: {str(e)}")
+            return []
+
+    def is_profile_running(self, profile_id: str) -> bool:
+        """
+        Проверяет, запущен ли профиль
+        
+        Args:
+            profile_id: ID профиля
+            
+        Returns:
+            bool: True если профиль запущен
+        """
+        try:
+            for proc in psutil.process_iter(['name', 'cmdline']):
+                if proc.info['name'] == 'chrome' or proc.info['name'] == 'Google Chrome':
+                    cmdline = proc.info['cmdline']
+                    if cmdline and f"Profile {profile_id}" in ' '.join(cmdline):
+                        return True
+            return False
+            
+        except Exception as e:
+            logger.error(f"⛔ Ошибка при проверке статуса профиля {profile_id}")
+            logger.debug(f"Причина: {str(e)}")
+            return False
 
     def run_scripts(self, profile_name: str, scripts_list: list[str], headless: bool = False) -> None:
         try:
@@ -130,7 +196,7 @@ class Chrome:
                     human_name = self.scripts[script]['human_name']
                     logger.info(f'ℹ️ {profile_name} - запускаю скрипт "{human_name}"')
                     script_data_path = os.path.join(DATA_PATH, 'scripts', "chrome", script)
-                    self.scripts[script]['method'](
+                    self.scripts[script]['function'](
                         profile_name,
                         script_data_path,
                         driver

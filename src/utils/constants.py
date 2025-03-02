@@ -22,3 +22,24 @@ PROFILE_WELCOME_PAGES_OUTPUT_PATH = CHROME_DATA_PATH / "WelcomePages"
 DATA_PATH.mkdir(parents=True, exist_ok=True)
 CHROME_DATA_PATH.mkdir(parents=True, exist_ok=True)
 CHROME_DRIVER_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+"""
+Константы для проекта
+"""
+
+# Путь к данным Chrome
+CHROME_DATA_PATH = os.path.abspath("data/profiles")
+
+# ID расширений
+EXTENSION_IDS = {
+    "SWITCHYOMEGA": "padekgcemlokbadohgkifijomclgjgif",
+    "METAMASK": "nkbihfbeogaeaoehlefnkodbefgpgknn",
+    "CHROME_STORE": "nmmhkkegccagdldgiimedpiccmgmieda"
+}
+
+# Названия профилей
+PROFILES = {
+    "PROFILE_69": "Profile 69",
+    "PROFILE_69_BACKUP": "Profile 69_Backup",
+    "PROFILE_69_EXPERIMENTAL": "Profile 69_Experimental"
+}

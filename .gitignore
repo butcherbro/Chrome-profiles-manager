@@ -39,6 +39,7 @@ data/profiles/*
 data/default_extensions/*
 data/app.lock
 data/comments_for_profiles.json
+custom_instructions.md
 
 # OS specific
 .DS_Store

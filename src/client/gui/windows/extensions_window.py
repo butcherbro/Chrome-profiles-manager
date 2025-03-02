@@ -15,6 +15,7 @@ from src.utils.helpers import (
 )
 from src.client.menu.utils import get_all_sorted_profiles
 from src.utils.constants import DEFAULT_EXTENSIONS_PATH, CHROME_DATA_PATH
+from src.utils.copy_extensions import copy_extensions_to_all_profiles
 
 
 class ExtensionsWindow(QDialog):
@@ -25,7 +26,26 @@ class ExtensionsWindow(QDialog):
         self.setMinimumSize(1000, 600)
         
         # Основной layout
-        layout = QHBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+        
+        # Верхняя кнопка для быстрого копирования
+        top_button_layout = QHBoxLayout()
+        
+        copy_all_button = QPushButton("📋 Копировать все расширения из профиля 03")
+        copy_all_button.setMinimumHeight(40)
+        copy_all_button.clicked.connect(self.copy_all_extensions)
+        top_button_layout.addWidget(copy_all_button)
+        
+        main_layout.addLayout(top_button_layout)
+        
+        # Разделительная линия
+        line = QLabel()
+        line.setStyleSheet("background-color: #cccccc;")
+        line.setFixedHeight(1)
+        main_layout.addWidget(line)
+        
+        # Контейнер для основного содержимого
+        content_layout = QHBoxLayout()
         
         # Левая часть - профили
         left_layout = QVBoxLayout()
@@ -36,7 +56,7 @@ class ExtensionsWindow(QDialog):
         self.load_profiles()
         left_layout.addWidget(self.profiles_list)
         
-        layout.addLayout(left_layout)
+        content_layout.addLayout(left_layout)
         
         # Центральная часть - установленные расширения
         center_layout = QVBoxLayout()
@@ -46,11 +66,11 @@ class ExtensionsWindow(QDialog):
         self.installed_extensions.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         center_layout.addWidget(self.installed_extensions)
         
-        remove_button = QPushButton("Удалить выбранные")
+        remove_button = QPushButton("🗑️ Удалить выбранные")
         remove_button.clicked.connect(self.remove_selected_extensions)
         center_layout.addWidget(remove_button)
         
-        layout.addLayout(center_layout)
+        content_layout.addLayout(center_layout)
         
         # Правая часть - доступные расширения
         right_layout = QVBoxLayout()
@@ -61,11 +81,13 @@ class ExtensionsWindow(QDialog):
         self.load_available_extensions()
         right_layout.addWidget(self.available_extensions)
         
-        install_button = QPushButton("Установить выбранные")
+        install_button = QPushButton("➕ Установить выбранные")
         install_button.clicked.connect(self.install_selected_extensions)
         right_layout.addWidget(install_button)
         
-        layout.addLayout(right_layout)
+        content_layout.addLayout(right_layout)
+        
+        main_layout.addLayout(content_layout)
         
         # Кнопки внизу
         buttons_layout = QHBoxLayout()
@@ -74,7 +96,7 @@ class ExtensionsWindow(QDialog):
         close_button.clicked.connect(self.accept)
         buttons_layout.addWidget(close_button)
         
-        layout.addLayout(buttons_layout)
+        main_layout.addLayout(buttons_layout)
         
         # Подключаем обновление списка установленных расширений
         self.profiles_list.itemSelectionChanged.connect(self.update_installed_extensions)
@@ -92,22 +114,38 @@ class ExtensionsWindow(QDialog):
         """Загрузка списка доступных расширений"""
         extensions = get_all_default_extensions_info()
         for ext_id, name in extensions.items():
-            display_text = f"{name} ({ext_id})" if name else ext_id
+            # Добавляем известные названия расширений
+            known_names = {
+                "padekgcemlokbadohgkifijomclgjgif": "Proxy SwitchyOmega",
+                "nkbihfbeogaeaoehlefnkodbefgpgknn": "MetaMask",
+                "nmmhkkegccagdldgiimedpiccmgmieda": "Google Payments"
+            }
+            display_name = known_names.get(ext_id, name) or ext_id
+            display_text = f"{display_name} ({ext_id})"
             self.available_extensions.addItem(display_text)
     
     def update_installed_extensions(self):
         """Обновление списка установленных расширений"""
         self.installed_extensions.clear()
         
-        selected_items = self.profiles_list.selectedItems()
-        if not selected_items:
+        # Получаем выбранные профили
+        selected_profiles = [item.text() for item in self.profiles_list.selectedItems()]
+        if not selected_profiles:
             return
-        
-        selected_profiles = [item.text() for item in selected_items]
+            
+        # Получаем установленные расширения
         extensions = get_profiles_extensions_info(selected_profiles)
         
+        # Добавляем известные названия расширений
+        known_names = {
+            "padekgcemlokbadohgkifijomclgjgif": "Proxy SwitchyOmega",
+            "nkbihfbeogaeaoehlefnkodbefgpgknn": "MetaMask",
+            "nmmhkkegccagdldgiimedpiccmgmieda": "Google Payments"
+        }
+        
         for ext_id, name in extensions.items():
-            display_text = f"{name} ({ext_id})" if name else ext_id
+            display_name = known_names.get(ext_id, name) or ext_id
+            display_text = f"{display_name} ({ext_id})"
             self.installed_extensions.addItem(display_text)
     
     def install_selected_extensions(self):
@@ -168,4 +206,32 @@ class ExtensionsWindow(QDialog):
             remove_extensions(profile, ext_ids)
         
         QMessageBox.information(self, "Успех", "Расширения удалены")
-        self.update_installed_extensions() 
+        self.update_installed_extensions()
+    
+    def copy_all_extensions(self):
+        """Копирование всех расширений из профиля 03"""
+        try:
+            reply = QMessageBox.question(
+                self,
+                "Подтверждение",
+                "Это действие скопирует все расширения из профиля 03 во все остальные профили.\n"
+                "Для криптокошельков будут сохранены существующие настройки в профилях.\n\n"
+                "Продолжить?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Закрываем Chrome перед копированием
+                kill_chrome_processes()
+                
+                if copy_extensions_to_all_profiles():
+                    QMessageBox.information(self, "Успех", "Расширения успешно скопированы во все профили")
+                    # Обновляем список установленных расширений
+                    self.update_installed_extensions()
+                else:
+                    QMessageBox.warning(self, "Ошибка", "Не удалось скопировать расширения. Проверьте логи.")
+                    
+        except Exception as e:
+            logger.error(f"⛔ Ошибка при копировании расширений: {str(e)}")
+            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {str(e)}") 

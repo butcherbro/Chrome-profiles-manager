@@ -4,6 +4,8 @@ from .agent_switcher import agent_switcher
 from .rabby_import import rabby_import
 from .test_profile import test_profile
 from .test_uniswap import test_uniswap
+from .test_extension import test_extension
+from .extensions.switchyomega.setup import setup_switchyomega
 
 __all__ = [
     'chrome_initial_setup',
@@ -11,5 +13,7 @@ __all__ = [
     'agent_switcher',
     'rabby_import',
     'test_profile',
-    'test_uniswap'
+    'test_uniswap',
+    'test_extension',
+    'setup_switchyomega'
 ]

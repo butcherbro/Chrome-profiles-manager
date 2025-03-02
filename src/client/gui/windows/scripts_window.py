@@ -7,11 +7,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from loguru import logger
 from random import shuffle
+import psutil
 
 from src.client.menu.utils import get_all_sorted_profiles
 from src.utils.helpers import get_comments_for_profiles
 from src.chrome.chrome import Chrome
 from src.manager.manager import Manager
+from src.manager.extensions.downloader import ExtensionDownloader
+from src.utils.constants import DEFAULT_EXTENSIONS_PATH
 
 
 class ScriptsWindow(QDialog):
@@ -267,4 +270,149 @@ class ScriptsWindow(QDialog):
         if self.script_type == "chrome":
             self.use_headless = self.headless_checkbox.isChecked()
         
-        self.accept() 
+        self.accept()
+
+    def create_buttons(self):
+        """Создает кнопки для запуска скриптов"""
+        self.buttons_data = {
+            '🌐 Настройка Chrome': self.chrome_initial_setup,
+            '🔄 Смена User-Agent': self.agent_switcher,
+            '🦊 Импорт кошелька Rabby': self.rabby_import,
+            '🧪 Тест профиля': self.test_profile,
+            '🔁 Тест Uniswap': self.test_uniswap,
+            '🔧 Настройка SwitchyOmega': self.setup_switchyomega,
+        }
+
+        for text, callback in self.buttons_data.items():
+            button = QPushButton(text)
+            button.clicked.connect(callback)
+            self.layout().addWidget(button)
+
+    def setup_switchyomega(self):
+        """Настройка SwitchyOmega для выбранных профилей"""
+        try:
+            # Получаем выбранные профили
+            selected_profiles = self.get_selected_profiles()
+            if not selected_profiles:
+                QMessageBox.warning(self, "Предупреждение", "Выберите хотя бы один профиль")
+                return
+            
+            # Проверяем наличие расширения
+            extension_path = DEFAULT_EXTENSIONS_PATH / "padekgcemlokbadohgkifijomclgjgif"
+            if not extension_path.exists():
+                reply = QMessageBox.question(
+                    self,
+                    "Расширение не найдено",
+                    "Расширение SwitchyOmega не установлено.\n"
+                    "Хотите установить его сейчас?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    try:
+                        downloader = ExtensionDownloader()
+                        if downloader.download_from_store("padekgcemlokbadohgkifijomclgjgif"):
+                            logger.success("✅ SwitchyOmega успешно установлен")
+                        else:
+                            # Пробуем установить из локальной папки
+                            local_path = DEFAULT_EXTENSIONS_PATH / "Proxy-SwitchyOmega"
+                            if local_path.exists():
+                                if downloader.add_extension(str(local_path)):
+                                    logger.success("✅ SwitchyOmega успешно добавлен из локальной папки")
+                                else:
+                                    QMessageBox.critical(
+                                        self,
+                                        "Ошибка",
+                                        "Не удалось установить SwitchyOmega.\n"
+                                        "Проверьте логи для деталей."
+                                    )
+                                    return
+                            else:
+                                QMessageBox.critical(
+                                    self,
+                                    "Ошибка",
+                                    "Не удалось установить SwitchyOmega.\n"
+                                    "Расширение не найдено ни в магазине, ни локально."
+                                )
+                                return
+                    except Exception as e:
+                        logger.error("❌ Ошибка при установке SwitchyOmega")
+                        logger.debug(f"Причина: {str(e)}")
+                        QMessageBox.critical(
+                            self,
+                            "Ошибка",
+                            f"Произошла ошибка при установке расширения: {str(e)}"
+                        )
+                        return
+                else:
+                    return
+            
+            # Подтверждение действия
+            reply = QMessageBox.question(
+                self,
+                "Подтверждение",
+                "Это действие настроит прокси в SwitchyOmega для выбранных профилей.\n"
+                "Убедитесь, что:\n"
+                "1. В файле .env настроены параметры прокси\n"
+                "2. Если расширение отключено Chrome, оно будет автоматически включено\n\n"
+                "Продолжить?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Закрываем Chrome перед настройкой
+                self.kill_chrome_processes()
+                
+                success_count = 0
+                failed_profiles = []
+                
+                # Настраиваем каждый профиль
+                for profile in selected_profiles:
+                    logger.info(f"⚙️ Настройка SwitchyOmega для профиля {profile}...")
+                    try:
+                        if setup_switchyomega(profile):
+                            success_count += 1
+                            logger.success(f"✅ Профиль {profile} успешно настроен")
+                        else:
+                            failed_profiles.append(profile)
+                            logger.error(f"❌ Не удалось настроить профиль {profile}")
+                    except Exception as e:
+                        failed_profiles.append(profile)
+                        logger.error(f"❌ Ошибка при настройке профиля {profile}")
+                        logger.debug(f"Причина: {str(e)}")
+                
+                # Показываем результат
+                if success_count > 0:
+                    message = f"Успешно настроено профилей: {success_count}"
+                    if failed_profiles:
+                        message += f"\nНе удалось настроить профили: {', '.join(failed_profiles)}"
+                    QMessageBox.information(self, "Результат", message)
+                else:
+                    QMessageBox.critical(
+                        self,
+                        "Ошибка",
+                        f"Не удалось настроить ни один профиль.\nПроверьте:\n"
+                        f"1. Корректность настроек прокси в .env\n"
+                        f"2. Логи для деталей ошибок"
+                    )
+                
+        except Exception as e:
+            logger.error("❌ Ошибка при настройке SwitchyOmega")
+            logger.debug(f"Причина: {str(e)}")
+            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {str(e)}")
+
+    def kill_chrome_processes(self):
+        """Закрывает все процессы Chrome"""
+        try:
+            for proc in psutil.process_iter(['name']):
+                if proc.info['name'] and 'chrome' in proc.info['name'].lower():
+                    try:
+                        proc.kill()
+                    except:
+                        pass
+            logger.info("✅ Все процессы Chrome успешно закрыты")
+        except Exception as e:
+            logger.error("❌ Ошибка при закрытии процессов Chrome")
+            logger.debug(f"Причина: {str(e)}") 
