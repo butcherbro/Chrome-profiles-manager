@@ -8,7 +8,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium import webdriver
 from loguru import logger
 
-from src.utils.helpers import set_comments_for_profiles
+from src.utils.helpers import set_comments_for_profiles, get_profiles_list
 from src.utils.constants import *
 from .scripts import *
 
@@ -36,6 +36,15 @@ class Chrome:
                 'method': rabby_import
             }
         }
+
+    def get_profiles(self) -> list[str]:
+        """
+        Получает список всех профилей Chrome
+        
+        Returns:
+            list[str]: Список имен профилей
+        """
+        return get_profiles_list()
 
     def create_new_profile(self, profile_name: str) -> None:
         try:
@@ -87,7 +96,9 @@ class Chrome:
                        headless: bool = False,
                        maximized: bool = False) -> subprocess.Popen | None:
         try:
+            logger.debug(f"launch_profile: profile_name={profile_name}, type={type(profile_name)}, debug={debug}, headless={headless}, maximized={maximized}")
             launch_args = self.__create_launch_flags(profile_name, debug, headless, maximized)
+            logger.debug(f"launch_args: {launch_args}")
 
             with open(os.devnull, 'w') as devnull:  # to avoid Chrome log spam
                 chrome_process = subprocess.Popen([CHROME_PATH, *launch_args], stdout=devnull, stderr=devnull)
@@ -159,26 +170,42 @@ class Chrome:
                               debug: bool = False,
                               headless: bool = False,
                               maximized: bool = False) -> list[str]:
+        logger.debug(f"__create_launch_flags: profile_name={profile_name}, type={type(profile_name)}")
         profile_path = self.__get_profile_path(profile_name)
+        logger.debug(f"profile_path={profile_path}, type={type(profile_path)}")
         profile_extensions_path = os.path.join(profile_path, "Extensions")
+        logger.debug(f"profile_extensions_path={profile_extensions_path}, type={type(profile_extensions_path)}")
         profile_html_path = self.__get_profile_welcome_page(profile_name)
+        logger.debug(f"profile_html_path={profile_html_path}, type={type(profile_html_path)}")
 
         all_extensions = []
-        for ext_id in os.listdir(profile_extensions_path):
-            versions_dir = os.path.join(profile_extensions_path, ext_id)
-            if os.path.isdir(versions_dir):
-                for version in os.listdir(versions_dir):
-                    version_path = os.path.join(versions_dir, version)
-                    if os.path.isfile(os.path.join(version_path, "manifest.json")):
-                        all_extensions.append(version_path)
+        if os.path.exists(profile_extensions_path):
+            logger.debug(f"Директория расширений существует: {profile_extensions_path}")
+            for ext_id in os.listdir(profile_extensions_path):
+                versions_dir = os.path.join(profile_extensions_path, ext_id)
+                if os.path.isdir(versions_dir):
+                    logger.debug(f"Найдена директория расширения: {versions_dir}")
+                    for version in os.listdir(versions_dir):
+                        version_path = os.path.join(versions_dir, version)
+                        manifest_path = os.path.join(version_path, "manifest.json")
+                        if os.path.isdir(version_path) and os.path.isfile(manifest_path):
+                            all_extensions.append(version_path)
+                            logger.debug(f"Добавлено расширение для загрузки: {ext_id} (версия {version})")
+        else:
+            logger.debug(f"Директория расширений не существует: {profile_extensions_path}")
 
-        load_arg = ",".join(all_extensions)
+        load_extension_arg = ""
+        if all_extensions:
+            load_extension_arg = f"--load-extension={','.join(all_extensions)}"
+            logger.debug(f"Аргумент для загрузки расширений: {load_extension_arg}")
+        else:
+            logger.debug("Нет расширений для загрузки")
 
         flags = [
             f"--user-data-dir={CHROME_DATA_PATH}",
             f"--profile-directory={f'Profile {profile_name}'}",
             "--no-first-run",
-            f"--load-extension={load_arg}",
+            load_extension_arg if all_extensions else None,
             f"file:///{profile_html_path}",
             "--no-sync",
             "--disable-features=IdentityConsistency",
@@ -188,6 +215,7 @@ class Chrome:
         ]
 
         flags = [i for i in flags if i is not None]
+        logger.debug(f"Флаги запуска Chrome: {flags}")
 
         if debug:
             free_port = self.__find_free_port()

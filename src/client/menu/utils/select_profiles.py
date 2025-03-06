@@ -59,7 +59,7 @@ def select_profiles() -> list[str] | None:
             if result["success"]:
                 comments = result["comments"]
             else:
-                logger.warning(f"⚠️ Не удалось загрузить комментарии, причина: {result["description"]}")
+                logger.warning(f"⚠️ Не удалось загрузить комментарии, причина: {result.get('description')}")
                 comments = {}
 
             comment = comments.get(profile, '')

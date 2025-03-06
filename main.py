@@ -1,18 +1,19 @@
 from sys import stderr
 
 import questionary
+
 from loguru import logger
 
 import src.client.menu as menu
 from src.utils.helpers import kill_chrome_processes
 from config import general_config
 
-logger.remove()
-logger_level = "DEBUG" if general_config['show_debug_logs'] else "INFO"
-log_format = "<white>{time:HH:mm:ss}</white> | <level>{level: <8}</level> | <white>{message}</white>"
-logger.add(stderr, level=logger_level, format=log_format)
-logger.add("data/debug_log.log", level="DEBUG", format=log_format)
-
+def setup_logger():
+    logger.remove()
+    logger_level = "DEBUG" if general_config['show_debug_logs'] else "INFO"
+    log_format = "<white>{time:HH:mm:ss}</white> | <level>{level: <8}</level> | <white>{message}</white>"
+    logger.add(stderr, level=logger_level, format=log_format)
+    logger.add("data/debug_log.log", level="DEBUG", format=log_format)
 
 def main():
     main_activities_list = {
@@ -39,9 +40,9 @@ def main():
             exit(0)
 
         else:
-            main_activities_list[main_activity]()  # TODO: pass arguments using mapping
+            main_activities_list[main_activity]()
             continue
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
+    setup_logger()
     main()

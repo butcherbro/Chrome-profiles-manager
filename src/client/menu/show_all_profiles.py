@@ -21,7 +21,7 @@ def show_all_profiles():
     if result["success"]:
         comments = result["comments"]
     else:
-        logger.warning(f"⚠️ Не удалось загрузить комментарии, причина: {result["description"]}")
+        logger.warning(f"⚠️ Не удалось загрузить комментарии, причина: {result.get('description')}")
         comments = {}
 
     for profile in profiles_list_sorted:

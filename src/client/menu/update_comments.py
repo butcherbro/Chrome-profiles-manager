@@ -23,7 +23,7 @@ def update_comments():
     if result["success"]:
         logger.info("✅  Комментарии обновлены")
     else:
-        logger.warning(f"⚠️ Не удалось обновить комментарии, причина: {result["description"]}")
+        logger.warning(f"⚠️ Не удалось обновить комментарии, причина: {result.get('description')}")
 
 
 
