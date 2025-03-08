@@ -16,7 +16,18 @@ class Manager:
             }
         }
 
-    def run_scripts(self, profile_name: str, scripts_list: list[str]) -> None:
+    def run_scripts(self, profile_name: str, scripts_list: list[str]) -> bool:
+        """
+        Запускает скрипты для указанного профиля
+        
+        Args:
+            profile_name (str): Имя профиля
+            scripts_list (list[str]): Список скриптов для запуска
+            
+        Returns:
+            bool: True, если все скрипты выполнены успешно, иначе False
+        """
+        success = True
         for script in scripts_list:
             try:
                 human_name = self.scripts[script]['human_name']
@@ -31,3 +42,6 @@ class Manager:
                 human_name = self.scripts[script]['human_name']
                 logger.error(f'⛔  {profile_name} - скрипт "{human_name}" завершен с ошибкой')
                 logger.debug(f'{profile_name} - скрипт "{human_name}" завершен с ошибкой, причина: {e}')
+                success = False
+        
+        return success

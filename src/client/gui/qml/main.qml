@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Window
 import "./components"
 
 ApplicationWindow {
@@ -11,13 +12,33 @@ ApplicationWindow {
     title: "Chrome Profile Manager"
     color: "#f0f0f0"  // Светло-серый фон
 
-    // Создаем экземпляр окна управления расширениями
+    // Создаем экземпляры компонентов
     ExtensionManager {
         id: extensionManagerWindow
         visible: false
         
         onBackClicked: {
             // Обновляем список профилей при закрытии окна управления расширениями
+            profileManager.update_profiles_list()
+        }
+    }
+    
+    ChromeScriptsRunner {
+        id: chromeScriptsRunner
+        visible: false
+        
+        onBackClicked: {
+            // Обновляем список профилей при закрытии окна прогона скриптов
+            profileManager.update_profiles_list()
+        }
+    }
+    
+    ManagerScriptsRunner {
+        id: managerScriptsRunner
+        visible: false
+        
+        onBackClicked: {
+            // Обновляем список профилей при закрытии окна прогона скриптов
             profileManager.update_profiles_list()
         }
     }
@@ -60,8 +81,8 @@ ApplicationWindow {
                         { text: "Просмотр профилей", icon: "📖", action: function() { stackView.push(profileViewer) } },
                         { text: "Обновить комментарии", icon: "📝", action: function() { stackView.push(profileCommentEditor) } },
                         { text: "Управление расширениями", icon: "🧩", action: function() { extensionManagerWindow.show() } },
-                        { text: "Прогон скриптов [chrome]", icon: "🤖", action: function() { profileManager.run_chrome_scripts() } },
-                        { text: "Прогон скриптов [manager]", icon: "🤖", action: function() { profileManager.run_manager_scripts() } },
+                        { text: "Прогон скриптов [chrome]", icon: "🤖", action: function() { chromeScriptsRunner.show() } },
+                        { text: "Прогон скриптов [manager]", icon: "🤖", action: function() { managerScriptsRunner.show() } },
                         { text: "Создание профилей", icon: "➕", action: function() { stackView.push(profileCreator) } },
                         { text: "Убить процессы Chrome", icon: "💀", action: function() { profileManager.kill_chrome() } },
                         { text: "Выход", icon: "🚪", action: function() { profileManager.quit_application() } }

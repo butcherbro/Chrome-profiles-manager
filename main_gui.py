@@ -27,6 +27,7 @@ from PySide6.QtCore import QUrl
 import json
 import threading
 import signal
+import importlib.util
 
 class ProfileManager(QObject):
     profilesListChanged = Signal()
@@ -36,6 +37,10 @@ class ProfileManager(QObject):
     profileCreationStatusChanged = Signal(bool, str)  # Сигнал для уведомления о статусе создания профилей (успех/неудача, сообщение)
     extensionOperationStatusChanged = Signal(bool, str)  # Сигнал для уведомления о статусе операций с расширениями (успех/неудача, сообщение)
     extensionsListChanged = Signal('QVariantList')  # Сигнал для уведомления об изменении списка расширений
+    scriptOperationStatusChanged = Signal(bool, str)  # Сигнал для уведомления о статусе операций со скриптами (успех/неудача, сообщение)
+    # Сигналы для работы с менеджер-скриптами
+    managerScriptsListChanged = Signal()
+    managerScriptOperationStatusChanged = Signal(bool, str)
 
     def __init__(self):
         super().__init__()
@@ -43,7 +48,9 @@ class ProfileManager(QObject):
         self._profiles_list = []
         self._selected_profiles = set()
         self._filtered_profiles = []
+        self._manager_scripts_list = []  # Список доступных менеджер-скриптов
         self.update_profiles_list()
+        self.engine = None  # Будет установлено позже
         
     @Slot()
     def update_profiles_list(self):
@@ -81,14 +88,19 @@ class ProfileManager(QObject):
     @Slot(str, bool)
     def toggleProfileSelection(self, profile_name, is_selected):
         try:
+            logger.debug(f"toggleProfileSelection вызван для {profile_name}, is_selected={is_selected}")
+            logger.debug(f"Текущие выбранные профили: {self._selected_profiles}")
+            
             if is_selected and profile_name not in self._selected_profiles:
                 self._selected_profiles.add(profile_name)
                 self.selectedProfilesChanged.emit()
                 logger.debug(f"Profile {profile_name} selected")
+                logger.debug(f"Обновленные выбранные профили: {self._selected_profiles}")
             elif not is_selected and profile_name in self._selected_profiles:
                 self._selected_profiles.discard(profile_name)
                 self.selectedProfilesChanged.emit()
                 logger.debug(f"Profile {profile_name} deselected")
+                logger.debug(f"Обновленные выбранные профили: {self._selected_profiles}")
         except Exception as e:
             logger.error(f"Error toggling profile {profile_name}: {e}")
 
@@ -126,12 +138,27 @@ class ProfileManager(QObject):
         
     @Slot()
     def deselectAllProfiles(self):
-        try:
-            self._selected_profiles.clear()
-            self.selectedProfilesChanged.emit()
-            logger.debug("Deselected all profiles")
-        except Exception as e:
-            logger.error(f"Error deselecting all profiles: {e}")
+        """
+        Снимает выбор со всех профилей
+        """
+        self._selected_profiles.clear()
+        self.selectedProfilesChanged.emit()
+        logger.debug("Все профили сняты с выбора")
+        
+    @Slot('QVariantList')
+    def setSelectedProfiles(self, profiles):
+        """
+        Устанавливает список выбранных профилей
+        
+        Args:
+            profiles: Список профилей для выбора
+        """
+        logger.debug(f"setSelectedProfiles вызван с параметрами: profiles={profiles}")
+        self._selected_profiles.clear()
+        for profile in profiles:
+            self._selected_profiles.add(profile)
+        self.selectedProfilesChanged.emit()
+        logger.debug(f"Установлены выбранные профили: {self._selected_profiles}")
         
     @Slot()
     def launchSelectedProfiles(self):
@@ -296,12 +323,62 @@ class ProfileManager(QObject):
         
     @Slot()
     def run_chrome_scripts(self):
-        run_chrome_scripts_on_multiple_profiles()
+        """
+        Открывает окно для прогона Chrome скриптов
+        """
+        # Находим объект ChromeScriptsRunner в QML
+        engine = QQmlApplicationEngine.contextForObject(self).engine()
+        root_objects = engine.rootObjects()
+        
+        for obj in root_objects:
+            chrome_scripts_runner = obj.findChild(QObject, "chromeScriptsRunner")
+            if chrome_scripts_runner:
+                chrome_scripts_runner.show()
+                return
+                
+        logger.warning("Не удалось найти окно ChromeScriptsRunner")
         
     @Slot()
     def run_manager_scripts(self):
-        run_manager_scripts_on_multiple_profiles()
-        
+        """Открывает окно для запуска менеджер-скриптов"""
+        try:
+            logger.info("Запуск метода run_manager_scripts")
+            
+            if not self.engine:
+                logger.error("Engine не инициализирован")
+                return
+                
+            # Находим окно для запуска скриптов
+            manager_scripts_runner = self.engine.rootObjects()[0].findChild(QObject, "managerScriptsRunner")
+            
+            if manager_scripts_runner:
+                logger.info("Найден компонент managerScriptsRunner")
+                try:
+                    # Обновляем список скриптов
+                    self.update_manager_scripts_list()
+                    logger.info(f"Обновлен список скриптов: {self._manager_scripts_list}")
+                    
+                    # Показываем окно
+                    logger.info("Вызываем метод show() для компонента managerScriptsRunner")
+                    manager_scripts_runner.show()
+                    logger.info("Метод show() выполнен успешно")
+                    return
+                except Exception as e:
+                    logger.error(f"Ошибка при настройке окна для запуска менеджер-скриптов: {e}")
+            else:
+                logger.warning("Окно для запуска менеджер-скриптов не найдено")
+            
+            # Если не удалось открыть окно, запускаем терминальную версию
+            logger.info("Запускаем терминальную версию")
+            from src.client.menu.run_manager_scripts_on_multiple_profiles import run_manager_scripts_on_multiple_profiles
+            run_manager_scripts_on_multiple_profiles()
+        except Exception as e:
+            logger.error(f"Ошибка при открытии окна для запуска менеджер-скриптов: {e}")
+            # Если не удалось открыть окно, запускаем терминальную версию
+            logger.info("Запускаем терминальную версию")
+            from src.client.menu.run_manager_scripts_on_multiple_profiles import run_manager_scripts_on_multiple_profiles
+            run_manager_scripts_on_multiple_profiles()
+    
     @Slot()
     def manage_extensions(self):
         manage_extensions()
@@ -1439,6 +1516,213 @@ class ProfileManager(QObject):
         executor = ThreadPoolExecutor(max_workers=1)
         executor.submit(install_task)
 
+    @Property('QVariantList', notify=profilesListChanged)
+    def chromeScriptsList(self):
+        """
+        Возвращает список доступных Chrome скриптов
+        
+        Returns:
+            list: Список названий скриптов
+        """
+        try:
+            scripts_path = os.path.join(PROJECT_PATH, "data", "scripts", "chrome")
+            scripts = []
+            
+            if os.path.exists(scripts_path):
+                for script_dir in os.listdir(scripts_path):
+                    script_path = os.path.join(scripts_path, script_dir)
+                    if os.path.isdir(script_path):
+                        config_path = os.path.join(script_path, "config.json")
+                        if os.path.exists(config_path):
+                            try:
+                                with open(config_path, 'r', encoding='utf-8') as f:
+                                    config = json.load(f)
+                                    human_name = config.get("human_name", script_dir)
+                                    scripts.append(human_name)
+                            except Exception as e:
+                                logger.error(f"Ошибка при чтении конфигурации скрипта {script_dir}: {e}")
+            
+            return scripts
+        except Exception as e:
+            logger.error(f"Ошибка при получении списка Chrome скриптов: {e}")
+            return []
+    
+    @Slot('QVariantList', bool)
+    def runChromeScripts(self, script_names, headless=False):
+        """
+        Запускает выбранные Chrome скрипты для выбранных профилей
+        
+        Args:
+            script_names: Список названий скриптов
+            headless: Флаг запуска в headless режиме
+        """
+        logger.debug(f"runChromeScripts вызван с параметрами: script_names={script_names}, headless={headless}")
+        logger.debug(f"Текущие выбранные профили: {self._selected_profiles}")
+        
+        # Запускаем операцию в отдельном потоке, чтобы не блокировать интерфейс
+        def run_task():
+            try:
+                logger.debug(f"run_task начал выполнение")
+                logger.debug(f"Выбранные профили в run_task: {self._selected_profiles}")
+                
+                if not self._selected_profiles:
+                    logger.error(f"Не выбрано ни одного профиля")
+                    self.scriptOperationStatusChanged.emit(False, "Не выбрано ни одного профиля")
+                    return
+                    
+                if not script_names:
+                    logger.error(f"Не выбрано ни одного скрипта")
+                    self.scriptOperationStatusChanged.emit(False, "Не выбрано ни одного скрипта")
+                    return
+                    
+                # Создаем копию выбранных профилей, чтобы избежать ошибки "Set changed size during iteration"
+                selected_profiles = list(self._selected_profiles)
+                
+                logger.info(f"Запуск Chrome скриптов {script_names} для профилей: {selected_profiles}, headless={headless}")
+                
+                # Получаем соответствие между человекочитаемыми названиями и директориями скриптов
+                scripts_path = os.path.join(PROJECT_PATH, "data", "scripts", "chrome")
+                script_dirs = {}
+                
+                if os.path.exists(scripts_path):
+                    for script_dir in os.listdir(scripts_path):
+                        script_path = os.path.join(scripts_path, script_dir)
+                        if os.path.isdir(script_path):
+                            config_path = os.path.join(script_path, "config.json")
+                            if os.path.exists(config_path):
+                                try:
+                                    with open(config_path, 'r', encoding='utf-8') as f:
+                                        config = json.load(f)
+                                        human_name = config.get("human_name", script_dir)
+                                        script_dirs[human_name] = script_dir
+                                except Exception as e:
+                                    logger.error(f"Ошибка при чтении конфигурации скрипта {script_dir}: {e}")
+                
+                # Получаем директории выбранных скриптов
+                selected_script_dirs = []
+                for script_name in script_names:
+                    if script_name in script_dirs:
+                        selected_script_dirs.append(script_dirs[script_name])
+                    else:
+                        logger.warning(f"Скрипт {script_name} не найден")
+                
+                if not selected_script_dirs:
+                    self.scriptOperationStatusChanged.emit(False, "Не удалось найти выбранные скрипты")
+                    return
+                
+                # Запускаем скрипты для каждого профиля
+                success_count = 0
+                total_operations = len(selected_profiles)
+                
+                for profile in selected_profiles:
+                    try:
+                        self.chrome.run_scripts(profile, selected_script_dirs, headless)
+                        success_count += 1
+                    except Exception as e:
+                        logger.error(f"Ошибка при запуске скриптов для профиля {profile}: {e}")
+                
+                if success_count == total_operations:
+                    self.scriptOperationStatusChanged.emit(True, f"Скрипты успешно выполнены для всех профилей ({len(selected_profiles)})")
+                else:
+                    self.scriptOperationStatusChanged.emit(True, f"Скрипты выполнены для {success_count} из {total_operations} профилей")
+                
+            except Exception as e:
+                logger.error(f"Ошибка при запуске Chrome скриптов: {e}")
+                self.scriptOperationStatusChanged.emit(False, f"Ошибка при запуске Chrome скриптов: {e}")
+        
+        # Запускаем задачу в отдельном потоке
+        threading.Thread(target=run_task).start()
+
+    @Slot(list, list, bool)
+    def runManagerScripts(self, profiles, scripts, shuffle_scripts=False):
+        """Запускает выбранные менеджер-скрипты для выбранных профилей
+        
+        Args:
+            profiles (list): Список профилей для запуска
+            scripts (list): Список скриптов для запуска
+            shuffle_scripts (bool): Перемешать порядок скриптов
+        """
+        logger.info(f"Вызван метод runManagerScripts с параметрами: profiles={profiles}, scripts={scripts}, shuffle_scripts={shuffle_scripts}")
+        try:
+            # Запускаем скрипты в отдельном потоке
+            logger.info("Создаем поток для выполнения скриптов")
+            thread = threading.Thread(
+                target=self._run_manager_scripts_thread,
+                args=(profiles, scripts, shuffle_scripts)
+            )
+            thread.daemon = True
+            logger.info("Запускаем поток")
+            thread.start()
+            logger.info("Поток запущен успешно")
+        except Exception as e:
+            logger.error(f"Ошибка при запуске менеджер-скриптов: {e}")
+            self.managerScriptOperationStatusChanged.emit(False, f"Ошибка при запуске скриптов: {e}")
+    
+    def _run_manager_scripts_thread(self, profiles, scripts, shuffle_scripts=False):
+        """Выполняет менеджер-скрипты в отдельном потоке
+        
+        Args:
+            profiles (list): Список профилей для запуска
+            scripts (list): Список скриптов для запуска
+            shuffle_scripts (bool): Перемешать порядок скриптов
+        """
+        logger.info(f"Запущен поток _run_manager_scripts_thread с параметрами: profiles={profiles}, scripts={scripts}, shuffle_scripts={shuffle_scripts}")
+        try:
+            from src.client.menu.run_manager_scripts_on_multiple_profiles import run_manager_scripts_on_multiple_profiles
+            logger.info("Импортирован модуль run_manager_scripts_on_multiple_profiles")
+            
+            # Запускаем скрипты
+            logger.info("Вызываем функцию run_manager_scripts_on_multiple_profiles")
+            success = run_manager_scripts_on_multiple_profiles(
+                profiles=profiles,
+                scripts=scripts,
+                shuffle_scripts=shuffle_scripts,
+                gui_mode=True
+            )
+            logger.info(f"Функция run_manager_scripts_on_multiple_profiles выполнена с результатом: {success}")
+            
+            # Отправляем сигнал о завершении операции
+            if success:
+                logger.info(f"Отправляем сигнал об успешном выполнении скриптов для {len(profiles)} профилей")
+                self.managerScriptOperationStatusChanged.emit(True, f"Скрипты успешно выполнены для всех профилей ({len(profiles)})")
+            else:
+                logger.info("Отправляем сигнал об ошибке при выполнении скриптов")
+                self.managerScriptOperationStatusChanged.emit(False, "Произошла ошибка при выполнении скриптов")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при выполнении менеджер-скриптов: {e}")
+            logger.info("Отправляем сигнал об ошибке при выполнении скриптов")
+            self.managerScriptOperationStatusChanged.emit(False, f"Ошибка при выполнении скриптов: {e}")
+
+    @Slot()
+    def update_manager_scripts_list(self):
+        """Обновляет список доступных менеджер-скриптов"""
+        try:
+            # Получаем список скриптов из директории src/manager/scripts
+            scripts_dir = os.path.join(os.path.dirname(__file__), 'src', 'manager', 'scripts')
+            self._manager_scripts_list = []
+            
+            if os.path.exists(scripts_dir):
+                for file in os.listdir(scripts_dir):
+                    if file.endswith('.py') and not file.startswith('__'):
+                        script_name = file[:-3]  # Убираем расширение .py
+                        self._manager_scripts_list.append(script_name)
+            
+            # Сортируем список скриптов
+            self._manager_scripts_list.sort()
+            
+            # Уведомляем об изменении списка скриптов
+            self.managerScriptsListChanged.emit()
+            logger.info(f"Обновлен список менеджер-скриптов: {self._manager_scripts_list}")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении списка менеджер-скриптов: {e}")
+    
+    @Property(list, notify=managerScriptsListChanged)
+    def managerScriptsList(self):
+        """Возвращает список доступных менеджер-скриптов"""
+        return self._manager_scripts_list
+
 def setup_logger():
     logger.remove()
     logger_level = "DEBUG" if general_config['show_debug_logs'] else "INFO"
@@ -1447,13 +1731,21 @@ def setup_logger():
     logger.add("data/debug_log.log", level="DEBUG", format=log_format)
 
 def main():
+    app = QGuiApplication(sys.argv)
+    
+    # Настраиваем логгер
     setup_logger()
     
-    app = QGuiApplication(sys.argv)
+    # Создаем экземпляр ProfileManager
+    profile_manager = ProfileManager()
+    
+    # Создаем QML движок
     engine = QQmlApplicationEngine()
     
-    # Регистрируем объект для использования в QML
-    profile_manager = ProfileManager()
+    # Устанавливаем engine в ProfileManager
+    profile_manager.engine = engine
+    
+    # Регистрируем ProfileManager в QML
     engine.rootContext().setContextProperty("profileManager", profile_manager)
     
     # Добавляем обработку сигналов завершения
