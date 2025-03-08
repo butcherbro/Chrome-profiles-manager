@@ -28,6 +28,12 @@ import json
 import threading
 import signal
 import importlib.util
+import random
+import subprocess
+import re
+import csv
+from datetime import datetime
+import uuid
 
 class ProfileManager(QObject):
     profilesListChanged = Signal()
@@ -41,6 +47,9 @@ class ProfileManager(QObject):
     # Сигналы для работы с менеджер-скриптами
     managerScriptsListChanged = Signal()
     managerScriptOperationStatusChanged = Signal(bool, str)
+    # Сигналы для работы со списками профилей
+    profileListsChanged = Signal()
+    profileListOperationStatusChanged = Signal(bool, str)  # Сигнал для уведомления о статусе операций со списками профилей
 
     def __init__(self):
         super().__init__()
@@ -49,6 +58,7 @@ class ProfileManager(QObject):
         self._selected_profiles = set()
         self._filtered_profiles = []
         self._manager_scripts_list = []  # Список доступных менеджер-скриптов
+        self._profile_lists = []  # Список доступных списков профилей
         self.update_profiles_list()
         self.engine = None  # Будет установлено позже
         
@@ -56,6 +66,8 @@ class ProfileManager(QObject):
     def update_profiles_list(self):
         try:
             self._profiles_list = get_profiles_list()
+            logger.debug(f"Загружено профилей: {len(self._profiles_list)}")
+            logger.debug(f"Список профилей: {self._profiles_list}")
             self.profilesListChanged.emit()
             # Очищаем выбранные профили при обновлении списка
             self._selected_profiles.clear()
@@ -83,10 +95,27 @@ class ProfileManager(QObject):
         
     @Slot(str, result=bool)
     def isProfileSelected(self, profile_name):
+        """
+        Проверяет, выбран ли профиль
+        
+        Args:
+            profile_name: Имя профиля (без префикса "Profile ")
+            
+        Returns:
+            bool: True, если профиль выбран, иначе False
+        """
+        # Проверяем, есть ли профиль в списке выбранных
         return profile_name in self._selected_profiles
         
     @Slot(str, bool)
     def toggleProfileSelection(self, profile_name, is_selected):
+        """
+        Переключает выбор профиля
+        
+        Args:
+            profile_name: Имя профиля (без префикса "Profile ")
+            is_selected: True, если профиль выбран, иначе False
+        """
         try:
             logger.debug(f"toggleProfileSelection вызван для {profile_name}, is_selected={is_selected}")
             logger.debug(f"Текущие выбранные профили: {self._selected_profiles}")
@@ -97,12 +126,12 @@ class ProfileManager(QObject):
                 logger.debug(f"Profile {profile_name} selected")
                 logger.debug(f"Обновленные выбранные профили: {self._selected_profiles}")
             elif not is_selected and profile_name in self._selected_profiles:
-                self._selected_profiles.discard(profile_name)
+                self._selected_profiles.remove(profile_name)
                 self.selectedProfilesChanged.emit()
                 logger.debug(f"Profile {profile_name} deselected")
                 logger.debug(f"Обновленные выбранные профили: {self._selected_profiles}")
         except Exception as e:
-            logger.error(f"Error toggling profile {profile_name}: {e}")
+            logger.error(f"Error toggling profile selection: {e}")
 
     @Slot(str)
     def searchProfilesByComment(self, search_text):
@@ -1722,6 +1751,402 @@ class ProfileManager(QObject):
     def managerScriptsList(self):
         """Возвращает список доступных менеджер-скриптов"""
         return self._manager_scripts_list
+
+    @Slot(str, result=bool)
+    def exportProfilesToCSV(self, file_path):
+        """
+        Экспортирует список профилей с комментариями в CSV-файл
+        
+        Args:
+            file_path: Путь к файлу для сохранения (если пустой, создается файл в директории data)
+            
+        Returns:
+            bool: True, если экспорт успешен, иначе False
+        """
+        try:
+            # Если путь не указан, создаем файл в директории data с текущей датой и временем
+            if not file_path:
+                # Создаем директорию data, если она не существует
+                os.makedirs("data", exist_ok=True)
+                # Генерируем имя файла с текущей датой и временем
+                current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                file_path = f"data/profiles_export_{current_time}.csv"
+            
+            # Получаем список профилей и их комментарии
+            profiles_data = []
+            for profile in self._profiles_list:
+                comment = self.getProfileComment(profile)
+                profiles_data.append({"profile": profile, "comment": comment})
+            
+            # Записываем данные в CSV-файл
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                fieldnames = ['profile', 'comment']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                for data in profiles_data:
+                    writer.writerow(data)
+            
+            logger.info(f"Профили успешно экспортированы в {file_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка при экспорте профилей: {e}")
+            return False
+    
+    @Slot()
+    def updateProfileLists(self):
+        """
+        Обновляет список профильных списков
+        """
+        try:
+            # Создаем директорию data, если она не существует
+            os.makedirs("data", exist_ok=True)
+            
+            # Путь к файлу со списками профилей
+            profile_lists_file = "data/profile_lists.json"
+            
+            # Если файл не существует, создаем его с пустой структурой
+            if not os.path.exists(profile_lists_file):
+                with open(profile_lists_file, 'w', encoding='utf-8') as f:
+                    json.dump({"lists": {}}, f, ensure_ascii=False, indent=4)
+            
+            # Загружаем списки профилей из файла
+            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Преобразуем словарь списков в список для QML
+            self._profile_lists = []
+            for list_id, list_data in data.get("lists", {}).items():
+                self._profile_lists.append({
+                    "id": list_id,
+                    "name": list_data.get("name", ""),
+                    "profiles": list_data.get("profiles", [])
+                })
+            
+            # Сортируем списки по имени
+            self._profile_lists.sort(key=lambda x: x["name"].lower())
+            
+            # Уведомляем об изменении списка
+            self.profileListsChanged.emit()
+            logger.debug(f"Загружено {len(self._profile_lists)} списков профилей")
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении списков профилей: {e}")
+    
+    @Property('QVariantList', notify=profileListsChanged)
+    def profileLists(self):
+        """
+        Возвращает список профильных списков
+        
+        Returns:
+            list: Список профильных списков
+        """
+        return self._profile_lists
+    
+    @Slot(str)
+    def createProfileList(self, list_name):
+        """
+        Создает новый список профилей
+        
+        Args:
+            list_name: Название списка
+        """
+        try:
+            # Создаем директорию data, если она не существует
+            os.makedirs("data", exist_ok=True)
+            
+            # Путь к файлу со списками профилей
+            profile_lists_file = "data/profile_lists.json"
+            
+            # Если файл не существует, создаем его с пустой структурой
+            if not os.path.exists(profile_lists_file):
+                with open(profile_lists_file, 'w', encoding='utf-8') as f:
+                    json.dump({"lists": {}}, f, ensure_ascii=False, indent=4)
+            
+            # Загружаем списки профилей из файла
+            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Генерируем уникальный ID для нового списка
+            list_id = str(uuid.uuid4())
+            
+            # Добавляем новый список
+            data["lists"][list_id] = {
+                "name": list_name,
+                "profiles": []
+            }
+            
+            # Сохраняем изменения
+            with open(profile_lists_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            
+            # Обновляем список профильных списков
+            self.updateProfileLists()
+            
+            # Уведомляем об успешном создании списка
+            self.profileListOperationStatusChanged.emit(True, f"Список '{list_name}' успешно создан")
+            logger.info(f"Создан новый список профилей: {list_name}")
+        except Exception as e:
+            self.profileListOperationStatusChanged.emit(False, f"Ошибка при создании списка: {e}")
+            logger.error(f"Ошибка при создании списка профилей: {e}")
+    
+    @Slot(str)
+    def deleteProfileList(self, list_id):
+        """
+        Удаляет список профилей
+        
+        Args:
+            list_id: ID списка
+        """
+        try:
+            # Путь к файлу со списками профилей
+            profile_lists_file = "data/profile_lists.json"
+            
+            # Загружаем списки профилей из файла
+            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Получаем имя списка перед удалением
+            list_name = data["lists"].get(list_id, {}).get("name", "")
+            
+            # Удаляем список
+            if list_id in data["lists"]:
+                del data["lists"][list_id]
+            
+            # Сохраняем изменения
+            with open(profile_lists_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            
+            # Обновляем список профильных списков
+            self.updateProfileLists()
+            
+            # Уведомляем об успешном удалении списка
+            self.profileListOperationStatusChanged.emit(True, f"Список '{list_name}' успешно удален")
+            logger.info(f"Удален список профилей: {list_name}")
+        except Exception as e:
+            self.profileListOperationStatusChanged.emit(False, f"Ошибка при удалении списка: {e}")
+            logger.error(f"Ошибка при удалении списка профилей: {e}")
+    
+    @Slot(str, str)
+    def renameProfileList(self, list_id, new_name):
+        """
+        Переименовывает список профилей
+        
+        Args:
+            list_id: ID списка
+            new_name: Новое название списка
+        """
+        try:
+            # Путь к файлу со списками профилей
+            profile_lists_file = "data/profile_lists.json"
+            
+            # Загружаем списки профилей из файла
+            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Получаем старое имя списка
+            old_name = data["lists"].get(list_id, {}).get("name", "")
+            
+            # Переименовываем список
+            if list_id in data["lists"]:
+                data["lists"][list_id]["name"] = new_name
+            
+            # Сохраняем изменения
+            with open(profile_lists_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            
+            # Обновляем список профильных списков
+            self.updateProfileLists()
+            
+            # Уведомляем об успешном переименовании списка
+            self.profileListOperationStatusChanged.emit(True, f"Список '{old_name}' переименован в '{new_name}'")
+            logger.info(f"Список профилей '{old_name}' переименован в '{new_name}'")
+        except Exception as e:
+            self.profileListOperationStatusChanged.emit(False, f"Ошибка при переименовании списка: {e}")
+            logger.error(f"Ошибка при переименовании списка профилей: {e}")
+    
+    @Slot(str)
+    def searchProfilesByName(self, search_text):
+        """
+        Фильтрует список профилей по имени
+        
+        Args:
+            search_text: Текст для поиска
+        """
+        try:
+            from src.utils.helpers import get_profile_comments
+            comments = get_profile_comments()
+            
+            if not search_text:
+                # Если поисковый запрос пустой, показываем все профили
+                filtered_profiles = []
+                for profile in self._profiles_list:
+                    # Получаем имя профиля без префикса для отображения
+                    display_name = profile.replace('Profile ', '')
+                    filtered_profiles.append({
+                        "name": display_name,
+                        "comment": comments.get(display_name, "")
+                    })
+            else:
+                search_text = search_text.lower()
+                filtered_profiles = []
+                for profile in self._profiles_list:
+                    # Получаем имя профиля без префикса для отображения
+                    display_name = profile.replace('Profile ', '')
+                    if search_text in display_name.lower():
+                        filtered_profiles.append({
+                            "name": display_name,
+                            "comment": comments.get(display_name, "")
+                        })
+            
+            self._filtered_profiles = filtered_profiles
+            self.filteredProfilesListChanged.emit()
+            logger.debug(f"Отфильтровано {len(filtered_profiles)} профилей по запросу '{search_text}'")
+            logger.debug(f"Первый профиль в списке: {filtered_profiles[0] if filtered_profiles else 'нет профилей'}")
+        except Exception as e:
+            logger.error(f"Ошибка при фильтрации профилей: {e}")
+    
+    @Slot(str)
+    def getProfilesInList(self, list_id):
+        """
+        Получает профили из указанного списка и устанавливает их как выбранные
+        
+        Args:
+            list_id: ID списка
+        """
+        try:
+            # Путь к файлу со списками профилей
+            profile_lists_file = "data/profile_lists.json"
+            
+            # Загружаем списки профилей из файла
+            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Получаем профили из списка
+            profiles = data["lists"].get(list_id, {}).get("profiles", [])
+            
+            # Устанавливаем эти профили как выбранные
+            self._selected_profiles = set(profiles)
+            self.selectedProfilesChanged.emit()
+            
+            # Получаем комментарии для профилей
+            from src.utils.helpers import get_profile_comments
+            comments = get_profile_comments()
+            
+            # Фильтруем профили, чтобы показать только те, которые есть в списке
+            filtered_profiles = []
+            
+            # Показываем только профили из списка, даже если список пуст
+            logger.debug(f"Фильтруем профили для списка {list_id}")
+            for profile in self._profiles_list:
+                # Получаем имя профиля без префикса для отображения
+                display_name = profile.replace('Profile ', '')
+                if display_name in profiles:
+                    filtered_profiles.append({
+                        "name": display_name,
+                        "comment": comments.get(display_name, "")
+                    })
+            
+            self._filtered_profiles = filtered_profiles
+            self.filteredProfilesListChanged.emit()
+            
+            logger.debug(f"Получены профили из списка {list_id}: {profiles}")
+            logger.debug(f"Всего профилей для отображения: {len(self._filtered_profiles)}")
+            logger.debug(f"Выбранные профили: {self._selected_profiles}")
+        except Exception as e:
+            logger.error(f"Ошибка при получении профилей из списка: {e}")
+    
+    @Slot(str)
+    def addProfilesToList(self, list_id):
+        """
+        Добавляет выбранные профили в указанный список
+        
+        Args:
+            list_id: ID списка
+        """
+        try:
+            # Путь к файлу со списками профилей
+            profile_lists_file = "data/profile_lists.json"
+            
+            # Загружаем списки профилей из файла
+            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Получаем имя списка
+            list_name = data["lists"].get(list_id, {}).get("name", "")
+            
+            # Получаем текущие профили в списке
+            current_profiles = set(data["lists"].get(list_id, {}).get("profiles", []))
+            
+            # Добавляем выбранные профили
+            profiles_to_add = self._selected_profiles - current_profiles
+            current_profiles.update(profiles_to_add)
+            
+            # Обновляем список профилей
+            if list_id in data["lists"]:
+                data["lists"][list_id]["profiles"] = list(current_profiles)
+            
+            # Сохраняем изменения
+            with open(profile_lists_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            
+            # Обновляем список профильных списков
+            self.updateProfileLists()
+            
+            # Обновляем отображение профилей в текущем списке
+            self.getProfilesInList(list_id)
+            
+            # Отправляем уведомление об успешном добавлении
+            self.profileListOperationStatusChanged.emit(True, f"Профили успешно добавлены в список '{list_name}'")
+            logger.debug(f"Профили {profiles_to_add} добавлены в список {list_id}")
+        except Exception as e:
+            self.profileListOperationStatusChanged.emit(False, f"Ошибка при добавлении профилей: {e}")
+            logger.error(f"Ошибка при добавлении профилей в список: {e}")
+    
+    @Slot(str)
+    def removeProfilesFromList(self, list_id):
+        """
+        Удаляет выбранные профили из указанного списка
+        
+        Args:
+            list_id: ID списка
+        """
+        try:
+            # Путь к файлу со списками профилей
+            profile_lists_file = "data/profile_lists.json"
+            
+            # Загружаем списки профилей из файла
+            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Получаем имя списка
+            list_name = data["lists"].get(list_id, {}).get("name", "")
+            
+            # Получаем текущие профили в списке
+            current_profiles = set(data["lists"].get(list_id, {}).get("profiles", []))
+            
+            # Удаляем выбранные профили
+            profiles_to_remove = self._selected_profiles.intersection(current_profiles)
+            current_profiles -= profiles_to_remove
+            
+            # Обновляем список профилей
+            if list_id in data["lists"]:
+                data["lists"][list_id]["profiles"] = list(current_profiles)
+            
+            # Сохраняем изменения
+            with open(profile_lists_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            
+            # Обновляем список профильных списков
+            self.updateProfileLists()
+            
+            # Обновляем отображение профилей в текущем списке
+            self.getProfilesInList(list_id)
+            
+            # Отправляем уведомление об успешном удалении
+            self.profileListOperationStatusChanged.emit(True, f"Профили успешно удалены из списка '{list_name}'")
+            logger.debug(f"Профили {profiles_to_remove} удалены из списка {list_id}")
+        except Exception as e:
+            self.profileListOperationStatusChanged.emit(False, f"Ошибка при удалении профилей: {e}")
+            logger.error(f"Ошибка при удалении профилей из списка: {e}")
 
 def setup_logger():
     logger.remove()

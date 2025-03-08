@@ -14,7 +14,8 @@ def get_profiles_list() -> list[str]:
         item_path = os.path.join(CHROME_DATA_PATH, item)
 
         if os.path.isdir(item_path) and item.startswith("Profile"):
-            profiles.append(item.replace('Profile ', ''))
+            # Возвращаем полное имя профиля, включая префикс "Profile "
+            profiles.append(item)
 
     return profiles
 
@@ -584,3 +585,18 @@ def kill_chrome_processes() -> None:
     except Exception as e:
         logger.error(f'⛔  Не удалоcь завершить процессы Chrome')
         logger.error(f'⛔  Не удалоcь завершить процессы Chrome, причина: {e}')
+
+
+def get_profile_comments() -> dict:
+    """
+    Получает словарь комментариев для профилей
+    
+    Returns:
+        dict: Словарь с комментариями, где ключ - имя профиля, значение - комментарий
+    """
+    result = get_comments_for_profiles()
+    if result["success"]:
+        return result["comments"]
+    else:
+        logger.warning(f"⚠️ Не удалось загрузить комментарии, причина: {result.get('description')}")
+        return {}
