@@ -12,6 +12,14 @@ ApplicationWindow {
     title: "Chrome Profile Manager"
     color: "#f0f0f0"  // Светло-серый фон
 
+    // Добавляем обработчик закрытия окна
+    onClosing: function(close) {
+        // Вызываем функцию корректного завершения работы приложения
+        profileManager.quit_application()
+        // Принимаем событие закрытия
+        close.accepted = true
+    }
+
     // Создаем экземпляры компонентов
     ExtensionManager {
         id: extensionManagerWindow
