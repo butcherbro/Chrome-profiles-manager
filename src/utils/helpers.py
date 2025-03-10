@@ -238,8 +238,14 @@ def copy_extension_from_profile_to_default(profile: str | int, ext_id: str) -> b
 
 
 def remove_extensions(profile: str | int, ext_ids: list[str]) -> None:
-    extensions_path = os.path.join(CHROME_DATA_PATH, f"Profile {profile}", "Extensions")
-    extensions_settings_path = os.path.join(CHROME_DATA_PATH, f"Profile {profile}", "Local Extension Settings")
+    # Проверяем, содержит ли имя профиля префикс "Profile "
+    if isinstance(profile, str) and profile.startswith("Profile "):
+        profile_path = profile
+    else:
+        profile_path = f"Profile {profile}"
+        
+    extensions_path = os.path.join(CHROME_DATA_PATH, profile_path, "Extensions")
+    extensions_settings_path = os.path.join(CHROME_DATA_PATH, profile_path, "Local Extension Settings")
 
     for ext_id in ext_ids:
         ext_path = os.path.join(extensions_path, ext_id)
@@ -274,17 +280,46 @@ def get_all_default_extensions_info() -> dict:
     return extensions_info
 
 
-def get_profiles_extensions_info(profiles_list) -> dict[str, str]:
+def get_profiles_extensions_info(profiles_list) -> dict:
+    """
+    Получает информацию о расширениях для списка профилей
+    
+    Args:
+        profiles_list: Список профилей
+        
+    Returns:
+        dict: Словарь с информацией о расширениях в формате {ext_id: {profile_name: ext_path, ...}, ...}
+    """
     extensions_info = {}
     for profile in profiles_list:
-        profile_path = CHROME_DATA_PATH / f"Profile {profile}"
+        # Проверяем, содержит ли имя профиля префикс "Profile "
+        if profile.startswith("Profile "):
+            profile_path = CHROME_DATA_PATH / profile
+            profile_name = profile
+        else:
+            profile_path = CHROME_DATA_PATH / f"Profile {profile}"
+            profile_name = f"Profile {profile}"
+            
         extensions_path = profile_path / "Extensions"
         if os.path.exists(extensions_path):
             for extension_id in os.listdir(extensions_path):
-                extension_path = os.path.join(extensions_path, extension_id)
-                if os.path.isdir(extension_path):
-                    name = get_extension_name(extension_path)
-                    extensions_info[extension_id] = name
+                extension_dir = extensions_path / extension_id
+                if os.path.isdir(extension_dir):
+                    # Находим последнюю версию расширения
+                    versions = [v for v in os.listdir(extension_dir) if os.path.isdir(extension_dir / v)]
+                    if not versions:
+                        continue
+                        
+                    # Берем последнюю версию (обычно самую новую)
+                    latest_version = sorted(versions)[-1]
+                    extension_path = str(extension_dir / latest_version)
+                    
+                    # Добавляем информацию о расширении
+                    if extension_id not in extensions_info:
+                        extensions_info[extension_id] = {}
+                    
+                    # Добавляем информацию о профиле
+                    extensions_info[extension_id][profile_name] = extension_path
 
     return extensions_info
 

@@ -32,7 +32,7 @@ Rectangle {
 
         // Заголовок
         Text {
-            text: "Создание профилей"
+            text: "Создание профилей и списков"
             font.pixelSize: 18
             font.bold: true
             Layout.alignment: Qt.AlignHCenter

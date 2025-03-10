@@ -60,6 +60,7 @@ class ProfileManager(QObject):
         self._manager_scripts_list = []  # Список доступных менеджер-скриптов
         self._profile_lists = []  # Список доступных списков профилей
         self.update_profiles_list()
+        self.updateProfileLists()  # Загружаем списки профилей
         self.engine = None  # Будет установлено позже
         
     @Slot()
@@ -72,12 +73,24 @@ class ProfileManager(QObject):
             # Очищаем выбранные профили при обновлении списка
             self._selected_profiles.clear()
             self.selectedProfilesChanged.emit()
+            
+            # Инициализируем _filtered_profiles всеми профилями
+            self.searchProfilesByName("")
         except Exception as e:
             logger.error(f"Error updating profiles list: {e}")
             
     @Property('QVariantList', notify=profilesListChanged)
     def profilesList(self):
-        return self._profiles_list
+        """
+        Возвращает список профилей без префикса "Profile " для отображения в интерфейсе
+        """
+        try:
+            # Удаляем префикс "Profile " из имен профилей для отображения
+            display_profiles = [profile.replace('Profile ', '') for profile in self._profiles_list]
+            return display_profiles
+        except Exception as e:
+            logger.error(f"Ошибка при получении списка профилей: {e}")
+            return []
 
     @Property('QVariantList', notify=filteredProfilesListChanged)
     def filteredProfilesList(self):
@@ -203,8 +216,14 @@ class ProfileManager(QObject):
         # Запускаем профили по одному
         for profile in profiles_to_launch:
             try:
+                # Если профиль содержит префикс "Profile ", удаляем его перед запуском
+                if isinstance(profile, str) and profile.startswith("Profile "):
+                    profile_name = profile.replace("Profile ", "")
+                else:
+                    profile_name = profile
+                
                 # Запускаем профиль
-                self.chrome.launch_profile(profile)
+                self.chrome.launch_profile(profile_name)
                 logger.info(f"✅  {profile} - профиль запущен")
             except Exception as e:
                 logger.error(f"❌  {profile} - ошибка запуска: {e}")
@@ -225,16 +244,22 @@ class ProfileManager(QObject):
         for name in profile_names:
             try:
                 if name in all_profiles:
+                    # Если профиль содержит префикс "Profile ", удаляем его перед запуском
+                    if isinstance(name, str) and name.startswith("Profile "):
+                        profile_name = name.replace("Profile ", "")
+                    else:
+                        profile_name = name
+                    
                     # Используем те же параметры, что и в терминальном интерфейсе
                     self.chrome.launch_profile(
-                        str(name),
+                        str(profile_name),
                         debug=False,
                         headless=False,
                         maximized=False
                     )
                     logger.info(f"✅  {name} - профиль запущен")
                 else:
-                    logger.warning(f"❌  {name} - профиль не найден")
+                    logger.warning(f"⚠️  {name} - профиль не найден")
             except Exception as e:
                 logger.error(f"❌  {name} - ошибка запуска: {e}")
     
@@ -580,12 +605,21 @@ class ProfileManager(QObject):
                 # Устанавливаем расширение для каждого профиля
                 success_count = 0
                 for profile in profiles:
+                    # Проверяем, содержит ли имя профиля префикс "Profile "
+                    if isinstance(profile, str) and profile.startswith("Profile "):
+                        profile_path = profile
+                        # Для передачи в copy_extension нужно убрать префикс
+                        profile_name = profile.replace("Profile ", "")
+                    else:
+                        profile_path = f"Profile {profile}"
+                        profile_name = profile
+                    
                     # Используем тот же способ формирования путей, что и в терминальном интерфейсе
-                    profile_extensions_path = CHROME_DATA_PATH / f"Profile {profile}" / "Extensions"
+                    profile_extensions_path = CHROME_DATA_PATH / profile_path / "Extensions"
                     os.makedirs(profile_extensions_path, exist_ok=True)
                     
                     dest_path = str(profile_extensions_path / extension_id)
-                    if copy_extension(extension_path, dest_path, profile, extension_id, True):
+                    if copy_extension(extension_path, dest_path, profile_name, extension_id, True):
                         success_count += 1
                         
                 if success_count > 0:
@@ -636,12 +670,21 @@ class ProfileManager(QObject):
                 # Устанавливаем расширение для каждого профиля
                 success_count = 0
                 for profile in profiles:
+                    # Проверяем, содержит ли имя профиля префикс "Profile "
+                    if isinstance(profile, str) and profile.startswith("Profile "):
+                        profile_path = profile
+                        # Для передачи в copy_extension нужно убрать префикс
+                        profile_name = profile.replace("Profile ", "")
+                    else:
+                        profile_path = f"Profile {profile}"
+                        profile_name = profile
+                    
                     # Используем тот же способ формирования путей, что и в терминальном интерфейсе
-                    profile_extensions_path = CHROME_DATA_PATH / f"Profile {profile}" / "Extensions"
+                    profile_extensions_path = CHROME_DATA_PATH / profile_path / "Extensions"
                     os.makedirs(profile_extensions_path, exist_ok=True)
                     
                     dest_path = str(profile_extensions_path / extension_id)
-                    if copy_extension(extension_path, dest_path, profile, extension_id, replace):
+                    if copy_extension(extension_path, dest_path, profile_name, extension_id, replace):
                         success_count += 1
                         
                 if success_count > 0:
@@ -690,12 +733,21 @@ class ProfileManager(QObject):
                 # Устанавливаем расширение для каждого выбранного профиля
                 success_count = 0
                 for profile in self._selected_profiles:
+                    # Проверяем, содержит ли имя профиля префикс "Profile "
+                    if isinstance(profile, str) and profile.startswith("Profile "):
+                        profile_path = profile
+                        # Для передачи в copy_extension нужно убрать префикс
+                        profile_name = profile.replace("Profile ", "")
+                    else:
+                        profile_path = f"Profile {profile}"
+                        profile_name = profile
+                    
                     # Используем тот же способ формирования путей, что и в терминальном интерфейсе
-                    profile_extensions_path = CHROME_DATA_PATH / f"Profile {profile}" / "Extensions"
+                    profile_extensions_path = CHROME_DATA_PATH / profile_path / "Extensions"
                     os.makedirs(profile_extensions_path, exist_ok=True)
                     
                     dest_path = str(profile_extensions_path / extension_id)
-                    if copy_extension(extension_path, dest_path, profile, extension_id, replace):
+                    if copy_extension(extension_path, dest_path, profile_name, extension_id, replace):
                         success_count += 1
                         
                 if success_count > 0:
@@ -746,12 +798,21 @@ class ProfileManager(QObject):
                 # Устанавливаем расширение для каждого выбранного профиля
                 success_count = 0
                 for profile in self._selected_profiles:
+                    # Проверяем, содержит ли имя профиля префикс "Profile "
+                    if isinstance(profile, str) and profile.startswith("Profile "):
+                        profile_path = profile
+                        # Для передачи в copy_extension нужно убрать префикс
+                        profile_name = profile.replace("Profile ", "")
+                    else:
+                        profile_path = f"Profile {profile}"
+                        profile_name = profile
+                    
                     # Используем тот же способ формирования путей, что и в терминальном интерфейсе
-                    profile_extensions_path = CHROME_DATA_PATH / f"Profile {profile}" / "Extensions"
+                    profile_extensions_path = CHROME_DATA_PATH / profile_path / "Extensions"
                     os.makedirs(profile_extensions_path, exist_ok=True)
                     
                     dest_path = str(profile_extensions_path / extension_id)
-                    if copy_extension(extension_path, dest_path, profile, extension_id, True):
+                    if copy_extension(extension_path, dest_path, profile_name, extension_id, True):
                         success_count += 1
                         
                 if success_count > 0:
@@ -821,8 +882,17 @@ class ProfileManager(QObject):
                                 # Получаем путь к расширению в папке default_extensions
                                 src_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
                                 
+                                # Проверяем, содержит ли имя профиля префикс "Profile "
+                                if isinstance(profile, str) and profile.startswith("Profile "):
+                                    profile_path = profile
+                                    # Для передачи в copy_extension нужно убрать префикс
+                                    profile_name = profile.replace("Profile ", "")
+                                else:
+                                    profile_path = f"Profile {profile}"
+                                    profile_name = profile
+                                
                                 # Формируем путь к папке с расширениями профиля
-                                profile_extensions_path = os.path.join(CHROME_DATA_PATH, f"Profile {profile}", "Extensions")
+                                profile_extensions_path = os.path.join(CHROME_DATA_PATH, profile_path, "Extensions")
                                 
                                 # Создаем папку Extensions, если она не существует
                                 if not os.path.exists(profile_extensions_path):
@@ -832,7 +902,7 @@ class ProfileManager(QObject):
                                 dest_path = os.path.join(profile_extensions_path, ext_id)
                                 
                                 # Копируем расширение
-                                result = copy_extension(src_path, dest_path, profile, ext_id, replace)
+                                result = copy_extension(src_path, dest_path, profile_name, ext_id, replace)
                                 
                                 if result:
                                     success_count += 1
@@ -911,8 +981,17 @@ class ProfileManager(QObject):
                                 # Получаем путь к расширению в папке default_extensions
                                 src_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
                                 
+                                # Проверяем, содержит ли имя профиля префикс "Profile "
+                                if isinstance(profile, str) and profile.startswith("Profile "):
+                                    profile_path = profile
+                                    # Для передачи в copy_extension нужно убрать префикс
+                                    profile_name = profile.replace("Profile ", "")
+                                else:
+                                    profile_path = f"Profile {profile}"
+                                    profile_name = profile
+                                
                                 # Формируем путь к папке с расширениями профиля
-                                profile_extensions_path = os.path.join(CHROME_DATA_PATH, f"Profile {profile}", "Extensions")
+                                profile_extensions_path = os.path.join(CHROME_DATA_PATH, profile_path, "Extensions")
                                 
                                 # Создаем папку Extensions, если она не существует
                                 if not os.path.exists(profile_extensions_path):
@@ -922,7 +1001,7 @@ class ProfileManager(QObject):
                                 dest_path = os.path.join(profile_extensions_path, ext_id)
                                 
                                 # Копируем расширение
-                                result = copy_extension(src_path, dest_path, profile, ext_id, replace)
+                                result = copy_extension(src_path, dest_path, profile_name, ext_id, replace)
                                 
                                 if result:
                                     success_count += 1
@@ -981,6 +1060,8 @@ class ProfileManager(QObject):
             with ThreadPoolExecutor(max_workers=general_config['max_workers']) as executor:
                 futures = []
                 for profile in profiles:
+                    # Профиль уже содержит префикс "Profile ", так как мы изменили get_profiles_list
+                    # Функция remove_extensions теперь умеет обрабатывать имена с префиксом
                     futures.append(executor.submit(remove_extensions, profile, extension_ids))
                 
                 # Ждем завершения всех задач
@@ -1017,6 +1098,8 @@ class ProfileManager(QObject):
             total_operations = len(extension_ids) * len(self._selected_profiles)
             
             for profile in self._selected_profiles:
+                # Профиль может содержать или не содержать префикс "Profile "
+                # Функция remove_extensions теперь умеет обрабатывать оба варианта
                 remove_extensions(profile, extension_ids)
                 success_count += 1
                 
@@ -1201,13 +1284,19 @@ class ProfileManager(QObject):
         Получает список расширений из указанного профиля и отправляет его в QML
         
         Args:
-            profile: Имя или номер профиля
+            profile: Имя или номер профиля (может быть с префиксом "Profile " или без него)
         """
         try:
             logger.info(f"Получение списка расширений из профиля {profile}")
             
+            # Проверяем, содержит ли имя профиля префикс "Profile "
+            if not profile.startswith("Profile "):
+                profile_path = f"Profile {profile}"
+            else:
+                profile_path = profile
+            
             # Формируем путь к папке с расширениями профиля
-            profile_extensions_path = Path(CHROME_DATA_PATH) / f"Profile {profile}" / "Extensions"
+            profile_extensions_path = Path(CHROME_DATA_PATH) / profile_path / "Extensions"
             
             if not profile_extensions_path.exists():
                 self.extensionOperationStatusChanged.emit(False, f"Папка с расширениями профиля {profile} не найдена")
@@ -1338,11 +1427,11 @@ class ProfileManager(QObject):
                 
             # Отправляем список расширений в QML
             self.extensionsListChanged.emit(extensions_list)
-            self.extensionOperationStatusChanged.emit(True, f"Найдено {len(extensions_list)} расширений в профиле {profile}")
+            self.extensionOperationStatusChanged.emit(True, f"Найдено {len(extensions_list)} расширений")
                 
         except Exception as e:
-            logger.error(f"Ошибка при получении списка расширений из профиля {profile}: {e}")
-            self.extensionOperationStatusChanged.emit(False, f"Ошибка при получении списка расширений из профиля {profile}: {e}")
+            logger.error(f"Ошибка при получении списка установленных расширений: {e}")
+            self.extensionOperationStatusChanged.emit(False, f"Ошибка при получении списка установленных расширений: {e}")
     
     @Slot()
     def listInstalledExtensions(self):
@@ -1645,7 +1734,13 @@ class ProfileManager(QObject):
                 
                 for profile in selected_profiles:
                     try:
-                        self.chrome.run_scripts(profile, selected_script_dirs, headless)
+                        # Если профиль содержит префикс "Profile ", удаляем его перед запуском
+                        if isinstance(profile, str) and profile.startswith("Profile "):
+                            profile_name = profile.replace("Profile ", "")
+                        else:
+                            profile_name = profile
+                            
+                        self.chrome.run_scripts(profile_name, selected_script_dirs, headless)
                         success_count += 1
                     except Exception as e:
                         logger.error(f"Ошибка при запуске скриптов для профиля {profile}: {e}")
@@ -1661,7 +1756,7 @@ class ProfileManager(QObject):
         
         # Запускаем задачу в отдельном потоке
         threading.Thread(target=run_task).start()
-
+    
     @Slot(list, list, bool)
     def runManagerScripts(self, profiles, scripts, shuffle_scripts=False):
         """Запускает выбранные менеджер-скрипты для выбранных профилей
@@ -1700,10 +1795,18 @@ class ProfileManager(QObject):
             from src.client.menu.run_manager_scripts_on_multiple_profiles import run_manager_scripts_on_multiple_profiles
             logger.info("Импортирован модуль run_manager_scripts_on_multiple_profiles")
             
+            # Обрабатываем имена профилей, удаляя префикс "Profile " если он есть
+            processed_profiles = []
+            for profile in profiles:
+                if isinstance(profile, str) and profile.startswith("Profile "):
+                    processed_profiles.append(profile.replace("Profile ", ""))
+                else:
+                    processed_profiles.append(profile)
+            
             # Запускаем скрипты
             logger.info("Вызываем функцию run_manager_scripts_on_multiple_profiles")
             success = run_manager_scripts_on_multiple_profiles(
-                profiles=profiles,
+                profiles=processed_profiles,
                 scripts=scripts,
                 shuffle_scripts=shuffle_scripts,
                 gui_mode=True
@@ -1712,8 +1815,8 @@ class ProfileManager(QObject):
             
             # Отправляем сигнал о завершении операции
             if success:
-                logger.info(f"Отправляем сигнал об успешном выполнении скриптов для {len(profiles)} профилей")
-                self.managerScriptOperationStatusChanged.emit(True, f"Скрипты успешно выполнены для всех профилей ({len(profiles)})")
+                logger.info(f"Отправляем сигнал об успешном выполнении скриптов для {len(processed_profiles)} профилей")
+                self.managerScriptOperationStatusChanged.emit(True, f"Скрипты успешно выполнены для всех профилей ({len(processed_profiles)})")
             else:
                 logger.info("Отправляем сигнал об ошибке при выполнении скриптов")
                 self.managerScriptOperationStatusChanged.emit(False, "Произошла ошибка при выполнении скриптов")
@@ -1722,7 +1825,7 @@ class ProfileManager(QObject):
             logger.error(f"Ошибка при выполнении менеджер-скриптов: {e}")
             logger.info("Отправляем сигнал об ошибке при выполнении скриптов")
             self.managerScriptOperationStatusChanged.emit(False, f"Ошибка при выполнении скриптов: {e}")
-
+    
     @Slot()
     def update_manager_scripts_list(self):
         """Обновляет список доступных менеджер-скриптов"""
@@ -2013,46 +2116,54 @@ class ProfileManager(QObject):
             list_id: ID списка
         """
         try:
-            # Путь к файлу со списками профилей
-            profile_lists_file = "data/profile_lists.json"
-            
-            # Загружаем списки профилей из файла
-            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+            # Загружаем списки профилей
+            with open('data/profile_lists.json', 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # Получаем профили из списка
-            profiles = data["lists"].get(list_id, {}).get("profiles", [])
-            
-            # Устанавливаем эти профили как выбранные
-            self._selected_profiles = set(profiles)
-            self.selectedProfilesChanged.emit()
-            
-            # Получаем комментарии для профилей
-            from src.utils.helpers import get_profile_comments
-            comments = get_profile_comments()
-            
-            # Фильтруем профили, чтобы показать только те, которые есть в списке
-            filtered_profiles = []
-            
-            # Показываем только профили из списка, даже если список пуст
-            logger.debug(f"Фильтруем профили для списка {list_id}")
-            for profile in self._profiles_list:
-                # Получаем имя профиля без префикса для отображения
-                display_name = profile.replace('Profile ', '')
-                if display_name in profiles:
-                    filtered_profiles.append({
-                        "name": display_name,
-                        "comment": comments.get(display_name, "")
-                    })
-            
-            self._filtered_profiles = filtered_profiles
-            self.filteredProfilesListChanged.emit()
-            
-            logger.debug(f"Получены профили из списка {list_id}: {profiles}")
-            logger.debug(f"Всего профилей для отображения: {len(self._filtered_profiles)}")
-            logger.debug(f"Выбранные профили: {self._selected_profiles}")
+            # Получаем выбранный список профилей
+            if 'lists' in data and list_id in data['lists']:
+                selected_list = data['lists'][list_id]
+                list_name = selected_list['name']
+                profiles_in_list = selected_list['profiles']
+                
+                # Устанавливаем выбранные профили (преобразуем список в множество)
+                self._selected_profiles = set(profiles_in_list)
+                logger.debug(f"Загружен список профилей '{list_name}' с {len(self._selected_profiles)} профилями")
+                
+                # Получаем комментарии для профилей
+                from src.utils.helpers import get_profile_comments
+                comments = get_profile_comments()
+                
+                # Фильтруем профили, чтобы показать только те, которые есть в списке
+                filtered_profiles = []
+                
+                # Показываем только профили из списка
+                for profile in self._profiles_list:
+                    # Получаем имя профиля без префикса для отображения
+                    display_name = profile.replace('Profile ', '')
+                    if display_name in profiles_in_list:
+                        filtered_profiles.append({
+                            "name": display_name,
+                            "comment": comments.get(display_name, "")
+                        })
+                
+                self._filtered_profiles = filtered_profiles
+                self.filteredProfilesListChanged.emit()
+                
+                # Уведомляем об изменении выбранных профилей
+                self.selectedProfilesChanged.emit()
+                
+                logger.debug(f"Всего профилей для отображения: {len(self._filtered_profiles)}")
+                if self._filtered_profiles:
+                    logger.debug(f"Первый профиль: {self._filtered_profiles[0]}")
+                
+                return True
+            else:
+                logger.warning(f"Список профилей с ID {list_id} не найден")
+                return False
         except Exception as e:
             logger.error(f"Ошибка при получении профилей из списка: {e}")
+            return False
     
     @Slot(str)
     def addProfilesToList(self, list_id):
