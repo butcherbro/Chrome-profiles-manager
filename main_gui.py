@@ -2375,6 +2375,91 @@ class ProfileManager(QObject):
             logger.error(f"Ошибка при удалении профилей: {e}")
             self.profileListOperationStatusChanged.emit(False, f"Ошибка при удалении профилей: {e}")
 
+    @Slot(str)
+    def launchProfilesFromList(self, list_id):
+        """
+        Запускает все профили из указанного списка
+        
+        Args:
+            list_id: ID списка профилей
+        """
+        try:
+            # Загружаем списки профилей
+            with open('data/profile_lists.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Получаем выбранный список профилей
+            if 'lists' in data and list_id in data['lists']:
+                selected_list = data['lists'][list_id]
+                list_name = selected_list['name']
+                profiles_in_list = selected_list['profiles']
+                
+                if not profiles_in_list:
+                    self.profileListOperationStatusChanged.emit(False, f"Список '{list_name}' не содержит профилей")
+                    return
+                
+                # Запускаем все профили из списка
+                logger.info(f"Запуск всех профилей из списка '{list_name}'")
+                self.launchProfilesByNames(profiles_in_list)
+                
+                self.profileListOperationStatusChanged.emit(True, f"Запущены все профили из списка '{list_name}'")
+            else:
+                self.profileListOperationStatusChanged.emit(False, f"Список с ID {list_id} не найден")
+        except Exception as e:
+            logger.error(f"Ошибка при запуске профилей из списка: {e}")
+            self.profileListOperationStatusChanged.emit(False, f"Ошибка при запуске профилей: {e}")
+
+    @Slot(str)
+    def searchProfileLists(self, search_text):
+        """
+        Выполняет поиск по названиям списков профилей
+        
+        Args:
+            search_text: Текст для поиска
+        """
+        try:
+            # Загружаем списки профилей из файла
+            profile_lists_file = "data/profile_lists.json"
+            
+            if not os.path.exists(profile_lists_file):
+                self._profile_lists = []
+                self.profileListsChanged.emit()
+                return
+                
+            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Если поисковый запрос пустой, показываем все списки
+            if not search_text:
+                self.updateProfileLists()
+                return
+            
+            # Преобразуем поисковый запрос в нижний регистр для регистронезависимого поиска
+            search_text = search_text.lower()
+            
+            # Фильтруем списки по названию
+            filtered_lists = []
+            for list_id, list_data in data.get("lists", {}).items():
+                list_name = list_data.get("name", "").lower()
+                if search_text in list_name:
+                    filtered_lists.append({
+                        "id": list_id,
+                        "name": list_data.get("name", ""),
+                        "profiles": list_data.get("profiles", [])
+                    })
+            
+            # Сортируем списки по имени
+            filtered_lists.sort(key=lambda x: x["name"].lower())
+            
+            # Обновляем список
+            self._profile_lists = filtered_lists
+            
+            # Уведомляем об изменении списка
+            self.profileListsChanged.emit()
+            logger.debug(f"Найдено {len(filtered_lists)} списков профилей по запросу '{search_text}'")
+        except Exception as e:
+            logger.error(f"Ошибка при поиске списков профилей: {e}")
+
 def setup_logger():
     logger.remove()
     logger_level = "DEBUG" if general_config['show_debug_logs'] else "INFO"

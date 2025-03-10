@@ -60,6 +60,16 @@ ApplicationWindow {
             profileManager.update_profiles_list()
         }
     }
+    
+    ProfileLauncher {
+        id: profileLauncherWindow
+        visible: false
+        
+        onBackClicked: {
+            // Обновляем список профилей при закрытии окна запуска профилей
+            profileManager.update_profiles_list()
+        }
+    }
 
     Component.onCompleted: {
         profileManager.update_profiles_list()
@@ -95,7 +105,7 @@ ApplicationWindow {
                 // Кнопки меню
                 Repeater {
                     model: [
-                        { text: "Запустить профили", icon: "🚀", action: function() { stackView.push(profileSelectionMenu) } },
+                        { text: "Запустить профили", icon: "🚀", action: function() { profileLauncherWindow.show() } },
                         { text: "Просмотр профилей", icon: "📖", action: function() { stackView.push(profileViewer) } },
                         { text: "Обновить комментарии", icon: "📝", action: function() { stackView.push(profileCommentEditor) } },
                         { text: "Управление расширениями", icon: "🧩", action: function() { extensionManagerWindow.show() } },
