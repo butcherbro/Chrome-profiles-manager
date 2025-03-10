@@ -9,7 +9,7 @@ from src.utils.helpers import (
     get_comments_for_profiles, copy_extension, remove_extensions, 
     get_profiles_extensions_info, get_all_default_extensions_info,
     get_extension_version, get_extension_icon_path, get_extension_name,
-    copy_extension_from_profile_to_default
+    copy_extension_from_profile_to_default, delete_profile
 )
 from src.utils.constants import PROJECT_PATH, CHROME_DATA_PATH, DEFAULT_EXTENSIONS_PATH, CHROME_DRIVER_PATH
 from src.client.menu import manage_extensions, run_chrome_scripts_on_multiple_profiles, run_manager_scripts_on_multiple_profiles, update_comments, create_multiple_profiles
@@ -59,6 +59,7 @@ class ProfileManager(QObject):
         self._filtered_profiles = []
         self._manager_scripts_list = []  # Список доступных менеджер-скриптов
         self._profile_lists = []  # Список доступных списков профилей
+        self._current_list_id = ""  # Текущий выбранный список профилей
         self.update_profiles_list()
         self.updateProfileLists()  # Загружаем списки профилей
         self.engine = None  # Будет установлено позже
@@ -2116,6 +2117,9 @@ class ProfileManager(QObject):
             list_id: ID списка
         """
         try:
+            # Сохраняем ID текущего списка
+            self._current_list_id = list_id
+            
             # Загружаем списки профилей
             with open('data/profile_lists.json', 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -2258,6 +2262,118 @@ class ProfileManager(QObject):
         except Exception as e:
             self.profileListOperationStatusChanged.emit(False, f"Ошибка при удалении профилей: {e}")
             logger.error(f"Ошибка при удалении профилей из списка: {e}")
+
+    @Slot()
+    def syncProfileLists(self):
+        """
+        Синхронизирует списки профилей с физически существующими профилями.
+        Удаляет из списков профили, которые не существуют физически.
+        """
+        try:
+            # Получаем актуальный список профилей (без префикса "Profile ")
+            actual_profiles = set(profile.replace('Profile ', '') for profile in get_profiles_list())
+            logger.debug(f"Актуальные профили: {actual_profiles}")
+            
+            # Загружаем списки профилей из файла
+            profile_lists_file = "data/profile_lists.json"
+            if not os.path.exists(profile_lists_file):
+                self.profileListOperationStatusChanged.emit(True, "Списки профилей синхронизированы")
+                return
+                
+            with open(profile_lists_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            changes_made = False
+            removed_count = 0
+            
+            # Проверяем каждый список
+            for list_id, list_data in data.get("lists", {}).items():
+                list_name = list_data.get("name", "")
+                profiles = list_data.get("profiles", [])
+                
+                # Находим профили, которые не существуют физически
+                invalid_profiles = [p for p in profiles if p not in actual_profiles]
+                
+                if invalid_profiles:
+                    # Удаляем несуществующие профили из списка
+                    data["lists"][list_id]["profiles"] = [p for p in profiles if p in actual_profiles]
+                    changes_made = True
+                    removed_count += len(invalid_profiles)
+                    logger.debug(f"Из списка '{list_name}' удалены несуществующие профили: {invalid_profiles}")
+            
+            # Сохраняем изменения, если были удалены профили
+            if changes_made:
+                with open(profile_lists_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=4)
+                
+                # Обновляем списки в интерфейсе
+                self.updateProfileLists()
+                
+                # Если был выбран список, обновляем его отображение
+                if hasattr(self, '_current_list_id') and self._current_list_id:
+                    self.getProfilesInList(self._current_list_id)
+                
+                self.profileListOperationStatusChanged.emit(True, f"Синхронизация завершена. Удалено {removed_count} несуществующих профилей из списков.")
+            else:
+                self.profileListOperationStatusChanged.emit(True, "Все списки профилей актуальны")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при синхронизации списков профилей: {e}")
+            self.profileListOperationStatusChanged.emit(False, f"Ошибка при синхронизации: {e}")
+
+    @Slot()
+    def resetCurrentList(self):
+        """
+        Сбрасывает текущий выбранный список профилей
+        """
+        self._current_list_id = ""
+
+    @Slot()
+    def deleteSelectedProfiles(self):
+        """
+        Полностью удаляет выбранные профили с диска
+        """
+        try:
+            if not self._selected_profiles:
+                self.profileListOperationStatusChanged.emit(False, "Не выбрано ни одного профиля для удаления")
+                return
+            
+            from src.utils.helpers import delete_profile
+            
+            success_count = 0
+            total_count = len(self._selected_profiles)
+            deleted_profiles = []
+            
+            # Удаляем каждый выбранный профиль
+            for profile in list(self._selected_profiles):
+                if delete_profile(profile):
+                    success_count += 1
+                    deleted_profiles.append(profile)
+                    # Удаляем профиль из списка выбранных
+                    self._selected_profiles.remove(profile)
+            
+            # Обновляем список профилей
+            self.update_profiles_list()
+            
+            # Синхронизируем списки профилей
+            self.syncProfileLists()
+            
+            # Отправляем уведомление о результате
+            if success_count > 0:
+                self.profileListOperationStatusChanged.emit(
+                    True, 
+                    f"Успешно удалено {success_count} из {total_count} профилей"
+                )
+                logger.info(f"Удалены профили: {deleted_profiles}")
+            else:
+                self.profileListOperationStatusChanged.emit(
+                    False, 
+                    "Не удалось удалить ни одного профиля"
+                )
+                
+        except Exception as e:
+            logger.error(f"Ошибка при удалении профилей: {e}")
+            self.profileListOperationStatusChanged.emit(False, f"Ошибка при удалении профилей: {e}")
 
 def setup_logger():
     logger.remove()

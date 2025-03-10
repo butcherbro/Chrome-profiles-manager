@@ -161,6 +161,28 @@ Window {
                                 Layout.fillWidth: true
                             }
                             
+                            // Кнопка обновления списков
+                            Button {
+                                text: "🔄 Обновить списки"
+                                Layout.fillWidth: true
+                                enabled: !isProcessing
+                                
+                                background: Rectangle {
+                                    color: parent.enabled ? (parent.hovered ? "#e0e0e0" : "#ffffff") : "#f5f5f5"
+                                    border.color: "#d0d0d0"
+                                    radius: 2
+                                }
+                                
+                                onClicked: {
+                                    isProcessing = true
+                                    profileManager.syncProfileLists()
+                                }
+                                
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Синхронизировать списки с физически существующими профилями"
+                                ToolTip.delay: 500
+                            }
+                            
                             // Поле для создания нового списка
                             RowLayout {
                                 Layout.fillWidth: true
@@ -326,6 +348,8 @@ Window {
                                         currentListName = ""
                                         // Показываем все профили
                                         profileManager.searchProfilesByName("")
+                                        // Сбрасываем текущий список в ProfileManager
+                                        profileManager.resetCurrentList()
                                     }
                                 }
                                 
@@ -538,6 +562,33 @@ Window {
                                         profileManager.removeProfilesFromList(currentListId)
                                     }
                                 }
+                            }
+                            
+                            // Кнопка удаления профилей
+                            Button {
+                                text: "🗑️ Удалить выбранные профили полностью"
+                                Layout.fillWidth: true
+                                enabled: profileManager.hasSelectedProfiles && !isProcessing
+                                
+                                background: Rectangle {
+                                    color: parent.enabled ? (parent.hovered ? "#ffcdd2" : "#ffebee") : "#f5f5f5"
+                                    border.color: "#e57373"
+                                    radius: 3
+                                }
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    horizontalAlignment: Text.AlignHCenter
+                                    color: parent.enabled ? "#c62828" : "#999999"
+                                }
+                                
+                                onClicked: {
+                                    deleteProfilesDialog.open()
+                                }
+                                
+                                ToolTip.visible: hovered
+                                ToolTip.text: "Полностью удалить выбранные профили с диска"
+                                ToolTip.delay: 500
                             }
                         }
                     }
@@ -996,6 +1047,76 @@ Window {
                         isProcessing = true
                         profileManager.deleteProfileList(deleteDialog.listId)
                         deleteDialog.close()
+                    }
+                }
+            }
+        }
+    }
+    
+    // Диалог удаления профилей
+    Dialog {
+        id: deleteProfilesDialog
+        title: "Удалить профили"
+        modal: true
+        anchors.centerIn: parent
+        width: 400
+        
+        contentItem: ColumnLayout {
+            spacing: 10
+            
+            Text {
+                text: "Вы уверены, что хотите полностью удалить выбранные профили?"
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: "#c62828"
+                font.bold: true
+            }
+            
+            Text {
+                text: "Это действие нельзя отменить. Профили будут удалены с диска."
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: "#666666"
+            }
+            
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                
+                Button {
+                    text: "Отмена"
+                    Layout.fillWidth: true
+                    
+                    background: Rectangle {
+                        color: parent.hovered ? "#e0e0e0" : "#ffffff"
+                        border.color: "#d0d0d0"
+                        radius: 3
+                    }
+                    
+                    onClicked: deleteProfilesDialog.close()
+                }
+                
+                Button {
+                    text: "Удалить"
+                    Layout.fillWidth: true
+                    
+                    background: Rectangle {
+                        color: parent.hovered ? "#ffcdd2" : "#ffebee"
+                        border.color: "#e57373"
+                        radius: 3
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "#c62828"
+                        font.bold: true
+                    }
+                    
+                    onClicked: {
+                        isProcessing = true
+                        profileManager.deleteSelectedProfiles()
+                        deleteProfilesDialog.close()
                     }
                 }
             }

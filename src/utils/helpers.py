@@ -635,3 +635,38 @@ def get_profile_comments() -> dict:
     else:
         logger.warning(f"⚠️ Не удалось загрузить комментарии, причина: {result.get('description')}")
         return {}
+
+
+def delete_profile(profile: str | int) -> bool:
+    """
+    Полностью удаляет профиль Chrome с диска
+    
+    Args:
+        profile: Имя профиля (с префиксом "Profile " или без)
+        
+    Returns:
+        bool: True если профиль успешно удален, False в случае ошибки
+    """
+    try:
+        # Проверяем, содержит ли имя профиля префикс "Profile "
+        if isinstance(profile, str) and profile.startswith("Profile "):
+            profile_path = profile
+        else:
+            profile_path = f"Profile {profile}"
+        
+        # Полный путь к папке профиля
+        full_profile_path = os.path.join(CHROME_DATA_PATH, profile_path)
+        
+        # Проверяем существование папки профиля
+        if not os.path.isdir(full_profile_path):
+            logger.warning(f"Профиль {profile_path} не существует")
+            return False
+        
+        # Удаляем папку профиля
+        shutil.rmtree(full_profile_path)
+        logger.info(f"Профиль {profile_path} успешно удален")
+        return True
+    except Exception as e:
+        logger.error(f"⛔ Не удалось удалить профиль {profile}")
+        logger.debug(f"Не удалось удалить профиль {profile}, причина: {e}")
+        return False
