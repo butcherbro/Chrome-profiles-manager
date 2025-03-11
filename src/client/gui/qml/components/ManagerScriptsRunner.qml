@@ -505,12 +505,12 @@ Window {
                                 delegate: CheckBox {
                                     width: filteredProfilesListView.width
                                     height: 30
-                                    text: modelData
+                                    text: typeof modelData === 'object' ? modelData.name : modelData
                                     font.pixelSize: 14
-                                    checked: profileManager.isProfileSelected(modelData)
+                                    checked: profileManager.isProfileSelected(typeof modelData === 'object' ? modelData.name : modelData)
                                     
                                     onCheckedChanged: {
-                                        profileManager.toggleProfileSelection(modelData, checked)
+                                        profileManager.toggleProfileSelection(typeof modelData === 'object' ? modelData.name : modelData, checked)
                                         // Принудительно обновляем список выбранных профилей
                                         updateSelectedProfiles()
                                     }

@@ -194,18 +194,15 @@ class Chrome:
         else:
             logger.debug(f"Директория расширений не существует: {profile_extensions_path}")
 
-        load_extension_arg = ""
-        if all_extensions:
-            load_extension_arg = f"--load-extension={','.join(all_extensions)}"
-            logger.debug(f"Аргумент для загрузки расширений: {load_extension_arg}")
-        else:
-            logger.debug("Нет расширений для загрузки")
+        # Формируем аргумент для загрузки расширений
+        load_arg = ",".join(all_extensions)
+        logger.debug(f"Аргумент для загрузки расширений: {load_arg}")
 
         flags = [
             f"--user-data-dir={CHROME_DATA_PATH}",
             f"--profile-directory={f'Profile {profile_name}'}",
             "--no-first-run",
-            load_extension_arg if all_extensions else None,
+            f"--load-extension={load_arg}",
             f"file:///{profile_html_path}",
             "--no-sync",
             "--disable-features=IdentityConsistency",

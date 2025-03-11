@@ -300,8 +300,10 @@ def get_profiles_extensions_info(profiles_list) -> dict:
             profile_path = CHROME_DATA_PATH / f"Profile {profile}"
             profile_name = f"Profile {profile}"
             
+        # Проверяем основной путь к расширениям
         extensions_path = profile_path / "Extensions"
         if os.path.exists(extensions_path):
+            logger.debug(f"Найдена директория расширений: {extensions_path}")
             for extension_id in os.listdir(extensions_path):
                 extension_dir = extensions_path / extension_id
                 if os.path.isdir(extension_dir):
@@ -314,12 +316,81 @@ def get_profiles_extensions_info(profiles_list) -> dict:
                     latest_version = sorted(versions)[-1]
                     extension_path = str(extension_dir / latest_version)
                     
+                    # Получаем информацию о расширении из манифеста
+                    manifest_path = os.path.join(extension_path, "manifest.json")
+                    extension_name = extension_id
+                    
+                    if os.path.exists(manifest_path):
+                        try:
+                            with open(manifest_path, 'r', encoding='utf-8') as f:
+                                manifest = json.load(f)
+                                extension_name = manifest.get('name', extension_id)
+                        except Exception as e:
+                            logger.error(f"Ошибка при чтении манифеста расширения {extension_id}: {e}")
+                    
                     # Добавляем информацию о расширении
                     if extension_id not in extensions_info:
                         extensions_info[extension_id] = {}
                     
                     # Добавляем информацию о профиле
                     extensions_info[extension_id][profile_name] = extension_path
+        else:
+            logger.debug(f"Директория расширений не найдена: {extensions_path}")
+            
+        # Проверяем альтернативные пути к расширениям
+        # 1. Проверяем путь к расширениям в Local State
+        local_state_path = profile_path / "Local State"
+        if os.path.exists(local_state_path):
+            try:
+                with open(local_state_path, 'r', encoding='utf-8') as f:
+                    local_state = json.load(f)
+                    extensions_settings = local_state.get('extensions', {}).get('settings', {})
+                    for ext_id, ext_data in extensions_settings.items():
+                        if ext_id not in extensions_info and ext_id != 'ahfgeienlihckogmohjhadlkjgocpleb':  # Исключаем Chrome Web Store
+                            # Проверяем, есть ли расширение в default_extensions
+                            default_ext_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
+                            if os.path.exists(default_ext_path):
+                                # Находим последнюю версию расширения
+                                versions = [v for v in os.listdir(default_ext_path) if os.path.isdir(os.path.join(default_ext_path, v))]
+                                if versions:
+                                    latest_version = sorted(versions)[-1]
+                                    extension_path = os.path.join(default_ext_path, latest_version)
+                                    
+                                    # Добавляем информацию о расширении
+                                    if ext_id not in extensions_info:
+                                        extensions_info[ext_id] = {}
+                                    
+                                    # Добавляем информацию о профиле
+                                    extensions_info[ext_id][profile_name] = extension_path
+            except Exception as e:
+                logger.error(f"Ошибка при чтении Local State для профиля {profile}: {e}")
+                
+        # 2. Проверяем путь к расширениям в Preferences
+        preferences_path = profile_path / "Preferences"
+        if os.path.exists(preferences_path):
+            try:
+                with open(preferences_path, 'r', encoding='utf-8') as f:
+                    preferences = json.load(f)
+                    extensions_prefs = preferences.get('extensions', {}).get('settings', {})
+                    for ext_id, ext_data in extensions_prefs.items():
+                        if ext_id not in extensions_info and ext_id != 'ahfgeienlihckogmohjhadlkjgocpleb':  # Исключаем Chrome Web Store
+                            # Проверяем, есть ли расширение в default_extensions
+                            default_ext_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
+                            if os.path.exists(default_ext_path):
+                                # Находим последнюю версию расширения
+                                versions = [v for v in os.listdir(default_ext_path) if os.path.isdir(os.path.join(default_ext_path, v))]
+                                if versions:
+                                    latest_version = sorted(versions)[-1]
+                                    extension_path = os.path.join(default_ext_path, latest_version)
+                                    
+                                    # Добавляем информацию о расширении
+                                    if ext_id not in extensions_info:
+                                        extensions_info[ext_id] = {}
+                                    
+                                    # Добавляем информацию о профиле
+                                    extensions_info[ext_id][profile_name] = extension_path
+            except Exception as e:
+                logger.error(f"Ошибка при чтении Preferences для профиля {profile}: {e}")
 
     return extensions_info
 
