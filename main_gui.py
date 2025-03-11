@@ -1391,13 +1391,12 @@ class ProfileManager(QObject):
                 
             # Формируем список расширений для QML
             extensions_list = []
-            for ext_id, profiles_dict in extensions_info.items():
-                # Получаем путь к расширению из первого профиля, где оно установлено
-                first_profile = next(iter(profiles_dict))
-                ext_path = profiles_dict[first_profile]
+            for ext_id, ext_name in extensions_info.items():
+                # Формируем путь к расширению
+                profile_path = os.path.join(CHROME_DATA_PATH, f"Profile {profiles[0]}")
+                ext_path = os.path.join(profile_path, "Extensions", ext_id)
                 
-                # Получаем имя, версию и иконку расширения
-                ext_name = get_extension_name(ext_path) if ext_path else "Без имени"
+                # Получаем версию и иконку расширения
                 ext_version = get_extension_version(ext_path)
                 ext_icon_path = get_extension_icon_path(ext_path)
                 
@@ -1415,7 +1414,7 @@ class ProfileManager(QObject):
                 # Формируем объект с информацией о расширении
                 extension_info = {
                     "id": ext_id, 
-                    "name": ext_name if ext_name and ext_name != ext_id else f"Расширение {ext_id[:8]}...",
+                    "name": ext_name if ext_name else f"Расширение {ext_id[:8]}...",
                     "version": ext_version,
                     "iconUrl": ext_icon_url,
                     "path": ext_path

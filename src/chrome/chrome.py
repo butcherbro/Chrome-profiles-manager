@@ -202,11 +202,10 @@ class Chrome:
             f"--user-data-dir={CHROME_DATA_PATH}",
             f"--profile-directory={f'Profile {profile_name}'}",
             "--no-first-run",
+            "--no-default-browser-check",
+            "--enable-extensions",
             f"--load-extension={load_arg}",
             f"file:///{profile_html_path}",
-            "--no-sync",
-            "--disable-features=IdentityConsistency",
-            "--disable-accounts-receiver",
             "--headless" if headless else None,
             "--start-maximized" if maximized else None
         ]

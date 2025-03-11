@@ -280,7 +280,7 @@ def get_all_default_extensions_info() -> dict:
     return extensions_info
 
 
-def get_profiles_extensions_info(profiles_list) -> dict:
+def get_profiles_extensions_info(profiles_list) -> dict[str, str]:
     """
     Получает информацию о расширениях для списка профилей
     
@@ -288,109 +288,34 @@ def get_profiles_extensions_info(profiles_list) -> dict:
         profiles_list: Список профилей
         
     Returns:
-        dict: Словарь с информацией о расширениях в формате {ext_id: {profile_name: ext_path, ...}, ...}
+        dict: Словарь с информацией о расширениях в формате {ext_id: name}
     """
     extensions_info = {}
     for profile in profiles_list:
         # Проверяем, содержит ли имя профиля префикс "Profile "
         if profile.startswith("Profile "):
-            profile_path = CHROME_DATA_PATH / profile
-            profile_name = profile
+            profile_path = os.path.join(CHROME_DATA_PATH, profile)
         else:
-            profile_path = CHROME_DATA_PATH / f"Profile {profile}"
-            profile_name = f"Profile {profile}"
+            profile_path = os.path.join(CHROME_DATA_PATH, f"Profile {profile}")
             
-        # Проверяем основной путь к расширениям
-        extensions_path = profile_path / "Extensions"
+        extensions_path = os.path.join(profile_path, "Extensions")
+        extensions_settings_path = os.path.join(profile_path, "Local Extension Settings")
+        if not os.path.isdir(extensions_path) and not os.path.isdir(extensions_settings_path):
+            continue
+
         if os.path.exists(extensions_path):
-            logger.debug(f"Найдена директория расширений: {extensions_path}")
             for extension_id in os.listdir(extensions_path):
-                extension_dir = extensions_path / extension_id
-                if os.path.isdir(extension_dir):
-                    # Находим последнюю версию расширения
-                    versions = [v for v in os.listdir(extension_dir) if os.path.isdir(extension_dir / v)]
-                    if not versions:
-                        continue
-                        
-                    # Берем последнюю версию (обычно самую новую)
-                    latest_version = sorted(versions)[-1]
-                    extension_path = str(extension_dir / latest_version)
-                    
-                    # Получаем информацию о расширении из манифеста
-                    manifest_path = os.path.join(extension_path, "manifest.json")
-                    extension_name = extension_id
-                    
-                    if os.path.exists(manifest_path):
-                        try:
-                            with open(manifest_path, 'r', encoding='utf-8') as f:
-                                manifest = json.load(f)
-                                extension_name = manifest.get('name', extension_id)
-                        except Exception as e:
-                            logger.error(f"Ошибка при чтении манифеста расширения {extension_id}: {e}")
-                    
-                    # Добавляем информацию о расширении
-                    if extension_id not in extensions_info:
-                        extensions_info[extension_id] = {}
-                    
-                    # Добавляем информацию о профиле
-                    extensions_info[extension_id][profile_name] = extension_path
-        else:
-            logger.debug(f"Директория расширений не найдена: {extensions_path}")
-            
-        # Проверяем альтернативные пути к расширениям
-        # 1. Проверяем путь к расширениям в Local State
-        local_state_path = profile_path / "Local State"
-        if os.path.exists(local_state_path):
-            try:
-                with open(local_state_path, 'r', encoding='utf-8') as f:
-                    local_state = json.load(f)
-                    extensions_settings = local_state.get('extensions', {}).get('settings', {})
-                    for ext_id, ext_data in extensions_settings.items():
-                        if ext_id not in extensions_info and ext_id != 'ahfgeienlihckogmohjhadlkjgocpleb':  # Исключаем Chrome Web Store
-                            # Проверяем, есть ли расширение в default_extensions
-                            default_ext_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
-                            if os.path.exists(default_ext_path):
-                                # Находим последнюю версию расширения
-                                versions = [v for v in os.listdir(default_ext_path) if os.path.isdir(os.path.join(default_ext_path, v))]
-                                if versions:
-                                    latest_version = sorted(versions)[-1]
-                                    extension_path = os.path.join(default_ext_path, latest_version)
-                                    
-                                    # Добавляем информацию о расширении
-                                    if ext_id not in extensions_info:
-                                        extensions_info[ext_id] = {}
-                                    
-                                    # Добавляем информацию о профиле
-                                    extensions_info[ext_id][profile_name] = extension_path
-            except Exception as e:
-                logger.error(f"Ошибка при чтении Local State для профиля {profile}: {e}")
-                
-        # 2. Проверяем путь к расширениям в Preferences
-        preferences_path = profile_path / "Preferences"
-        if os.path.exists(preferences_path):
-            try:
-                with open(preferences_path, 'r', encoding='utf-8') as f:
-                    preferences = json.load(f)
-                    extensions_prefs = preferences.get('extensions', {}).get('settings', {})
-                    for ext_id, ext_data in extensions_prefs.items():
-                        if ext_id not in extensions_info and ext_id != 'ahfgeienlihckogmohjhadlkjgocpleb':  # Исключаем Chrome Web Store
-                            # Проверяем, есть ли расширение в default_extensions
-                            default_ext_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
-                            if os.path.exists(default_ext_path):
-                                # Находим последнюю версию расширения
-                                versions = [v for v in os.listdir(default_ext_path) if os.path.isdir(os.path.join(default_ext_path, v))]
-                                if versions:
-                                    latest_version = sorted(versions)[-1]
-                                    extension_path = os.path.join(default_ext_path, latest_version)
-                                    
-                                    # Добавляем информацию о расширении
-                                    if ext_id not in extensions_info:
-                                        extensions_info[ext_id] = {}
-                                    
-                                    # Добавляем информацию о профиле
-                                    extensions_info[ext_id][profile_name] = extension_path
-            except Exception as e:
-                logger.error(f"Ошибка при чтении Preferences для профиля {profile}: {e}")
+                extension_path = os.path.join(extensions_path, extension_id)
+                if os.path.isdir(extension_path):
+                    name = get_extension_name(extension_path)
+                    extensions_info[extension_id] = name
+
+        if os.path.exists(extensions_settings_path):
+            for extension_id in os.listdir(extensions_settings_path):
+                extension_settings_path = os.path.join(extensions_settings_path, extension_id)
+                if os.path.isdir(extension_settings_path):
+                    if extensions_info.get(extension_id) is None:
+                        extensions_info[extension_id] = ''
 
     return extensions_info
 
@@ -403,33 +328,20 @@ def get_extension_name(extension_path: str) -> str:
         extension_path: Путь к папке расширения
         
     Returns:
-        str: Имя расширения или ID расширения в случае ошибки
+        str: Имя расширения или пустая строка в случае ошибки
     """
-    try:
-        extension_id = os.path.basename(extension_path)
-        
-        # Сначала проверяем, есть ли manifest.json в корне папки расширения
-        manifest_path = os.path.join(extension_path, "manifest.json")
-        if os.path.exists(manifest_path):
-            return read_manifest_name(manifest_path)
-        
-        # Если нет, ищем папки версий и проверяем manifest.json в них
-        version_folders = []
-        for item in os.listdir(extension_path):
-            item_path = os.path.join(extension_path, item)
-            if os.path.isdir(item_path):
-                manifest_path = os.path.join(item_path, "manifest.json")
-                if os.path.isfile(manifest_path):
-                    version_folders.append(item)
-                    name = read_manifest_name(manifest_path)
-                    if name:
-                        return name
-        
-        # Если не нашли имя, возвращаем ID расширения
-        return extension_id
-    except Exception as e:
-        logger.error(f"Error getting extension name: {e}")
-        return os.path.basename(extension_path)
+    manifest_path = os.path.join(extension_path, "manifest.json")
+    if os.path.isfile(manifest_path):
+        return read_manifest_name(manifest_path)
+
+    for subdir in os.listdir(extension_path):
+        version_path = os.path.join(extension_path, subdir)
+        if os.path.isdir(version_path):
+            manifest_path = os.path.join(version_path, "manifest.json")
+            if os.path.isfile(manifest_path):
+                return read_manifest_name(manifest_path)
+
+    return ''
 
 
 def get_extension_version(extension_path: str) -> str:
@@ -658,26 +570,8 @@ def read_manifest_name(manifest_path: str) -> str:
         with open(manifest_path, 'r', encoding='utf-8') as file:
             manifest = json.load(file)
 
-        # Проверяем различные поля, где может быть указано имя расширения
-        # Сначала проверяем основное поле name
-        name = manifest.get("name", "")
-        if name:
-            return name
-            
-        # Проверяем поле action.default_title (для новых манифестов v3)
-        action_title = manifest.get("action", {}).get("default_title", "")
-        if action_title:
-            return action_title
-            
-        # Проверяем поле browser_action.default_title (для старых манифестов v2)
-        browser_action_title = manifest.get("browser_action", {}).get("default_title", "")
-        if browser_action_title:
-            return browser_action_title
-            
-        # Если ничего не нашли, возвращаем пустую строку
-        return ""
-    except (json.JSONDecodeError, OSError) as e:
-        logger.error(f"Ошибка при чтении manifest.json: {e}")
+        return manifest.get("action", {}).get("default_title", "")
+    except (json.JSONDecodeError, OSError):
         return ''
 
 
