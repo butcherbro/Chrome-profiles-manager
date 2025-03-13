@@ -14,3 +14,6 @@ CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe" if platfo
 CHROME_DRIVER_PATH = PROJECT_PATH / "src" / "chrome" / "scripts" / chrome_driver_name
 PROFILE_WELCOME_PAGE_TEMPLATE_PATH = PROJECT_PATH / "src" / "client" / "template.html"
 PROFILE_WELCOME_PAGES_OUTPUT_PATH = CHROME_DATA_PATH / "WelcomePages"
+
+# ID расширений
+METAMASK_ID = "nkbihfbeogaeaoehlefnkodbefgpgknn"

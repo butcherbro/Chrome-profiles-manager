@@ -1,0 +1,69 @@
+{
+    "selectors": {
+        "import_wallet_button": "button:has-text('Import wallet')",
+        "i_agree_button": "button:has-text('I agree')",
+        "import_with_seed_phrase": "button:has-text('Import an existing wallet')",
+        "seed_phrase_input": "textarea[placeholder='Paste Secret Recovery Phrase from clipboard']",
+        "password_input": "input[type='password']",
+        "confirm_password_input": "input[autocomplete='new-password']:nth-child(2)",
+        "terms_checkbox": "input[type='checkbox']",
+        "import_button": "button:has-text('Import')",
+        "all_done_button": "button:has-text('All Done')",
+        "got_it_button": "button:has-text('Got it')",
+        "close_popup_button": "button:has-text('Close')",
+        "next_button": "button:has-text('Next')",
+        "skip_button": "button:has-text('Skip')",
+        "networks_button": "button[data-testid='network-display']",
+        "add_network_button": "button:has-text('Add network')",
+        "add_network_manually": "button:has-text('Add a network manually')",
+        "network_name_input": "input[id='network-name']",
+        "rpc_url_input": "input[id='rpc-url']",
+        "chain_id_input": "input[id='chainId']",
+        "currency_symbol_input": "input[id='currency-symbol']",
+        "block_explorer_input": "input[id='block-explorer-url']",
+        "save_network_button": "button:has-text('Save')",
+        "close_all_button": "button[aria-label='Close']"
+    },
+    "timeouts": {
+        "navigation": 60000,
+        "element": 30000,
+        "action": 5000
+    },
+    "networks": {
+        "ethereum": {
+            "name": "Ethereum Mainnet",
+            "rpc_url": "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
+            "chain_id": "1",
+            "currency_symbol": "ETH",
+            "block_explorer_url": "https://etherscan.io"
+        },
+        "optimism": {
+            "name": "Optimism",
+            "rpc_url": "https://mainnet.optimism.io",
+            "chain_id": "10",
+            "currency_symbol": "ETH",
+            "block_explorer_url": "https://optimistic.etherscan.io"
+        },
+        "arbitrum": {
+            "name": "Arbitrum One",
+            "rpc_url": "https://arb1.arbitrum.io/rpc",
+            "chain_id": "42161",
+            "currency_symbol": "ETH",
+            "block_explorer_url": "https://arbiscan.io"
+        },
+        "base": {
+            "name": "Base",
+            "rpc_url": "https://mainnet.base.org",
+            "chain_id": "8453",
+            "currency_symbol": "ETH",
+            "block_explorer_url": "https://basescan.org"
+        },
+        "polygon": {
+            "name": "Polygon",
+            "rpc_url": "https://polygon-rpc.com",
+            "chain_id": "137",
+            "currency_symbol": "MATIC",
+            "block_explorer_url": "https://polygonscan.com"
+        }
+    }
+} 

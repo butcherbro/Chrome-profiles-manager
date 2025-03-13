@@ -1,0 +1,30 @@
+{
+    "debug_port": 9222,
+    "launch_flags": {
+        "required": [
+            "--user-data-dir={CHROME_DATA_PATH}",
+            "--profile-directory=Profile {profile_name}",
+            "--remote-debugging-port={debug_port}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--enable-automation"
+        ],
+        "optional": {
+            "headless": "--headless=new"
+        }
+    },
+    "timeouts": {
+        "chrome_startup": 30,
+        "page_navigation": 120000,
+        "element_search": 60000,
+        "process_kill": 2
+    },
+    "extensions": {
+        "required": [],
+        "path_pattern": "{CHROME_DATA_PATH}/Profile {profile_name}/Extensions"
+    },
+    "urls": {
+        "debug_endpoint": "http://localhost:{debug_port}/json/version"
+    }
+} 
+
