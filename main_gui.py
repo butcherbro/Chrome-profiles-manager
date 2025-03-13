@@ -9,7 +9,8 @@ from src.utils.helpers import (
     get_comments_for_profiles, copy_extension, remove_extensions, 
     get_profiles_extensions_info, get_all_default_extensions_info,
     get_extension_version, get_extension_icon_path, get_extension_name,
-    copy_extension_from_profile_to_default, delete_profile
+    copy_extension_from_profile_to_default, delete_profile, restore_default_extensions,
+    safe_remove_extensions, safe_install_extension
 )
 from src.utils.constants import PROJECT_PATH, CHROME_DATA_PATH, DEFAULT_EXTENSIONS_PATH, CHROME_DRIVER_PATH
 from src.client.menu import manage_extensions, run_chrome_scripts_on_multiple_profiles, run_manager_scripts_on_multiple_profiles, update_comments, create_multiple_profiles
@@ -64,13 +65,42 @@ class ProfileManager(QObject):
         self.updateProfileLists()  # Загружаем списки профилей
         self.engine = None  # Будет установлено позже
         
+    def _sort_profile_name(self, profile_name):
+        """
+        Вспомогательная функция для сортировки имен профилей
+        
+        Args:
+            profile_name: Имя профиля (может содержать префикс "Profile ")
+            
+        Returns:
+            tuple: Кортеж для сортировки (тип, значение)
+        """
+        # Удаляем префикс "Profile " если он есть
+        name = profile_name.replace("Profile ", "")
+        
+        # Пробуем преобразовать в число
+        try:
+            return (0, int(name))  # Числовые имена будут первыми
+        except ValueError:
+            # Если не число, проверяем является ли строка только буквами
+            if name.isalpha():
+                return (1, name.lower())  # Буквенные имена будут вторыми
+            else:
+                return (2, name.lower())  # Смешанные имена будут последними
+
     @Slot()
     def update_profiles_list(self):
         try:
-            self._profiles_list = get_profiles_list()
+            # Получаем список профилей
+            profiles = get_profiles_list()
+            
+            # Сортируем профили
+            self._profiles_list = sorted(profiles, key=self._sort_profile_name)
+            
             logger.debug(f"Загружено профилей: {len(self._profiles_list)}")
             logger.debug(f"Список профилей: {self._profiles_list}")
             self.profilesListChanged.emit()
+            
             # Очищаем выбранные профили при обновлении списка
             self._selected_profiles.clear()
             self.selectedProfilesChanged.emit()
@@ -643,207 +673,48 @@ class ProfileManager(QObject):
     @Slot(str, bool)
     def installExtensionForAllProfilesWithReplace(self, extension_id, replace):
         """
-        Устанавливает расширение для всех профилей с возможностью замены существующего
+        Безопасно устанавливает расширение для всех профилей
         
         Args:
-            extension_id: ID расширения в Chrome Web Store
+            extension_id: ID расширения
             replace: Заменять ли существующее расширение
         """
-        # Запускаем операцию в отдельном потоке, чтобы не блокировать интерфейс
-        def install_task():
-            try:
-                logger.info(f"Установка расширения {extension_id} для всех профилей (replace={replace})")
+        try:
+            # Получаем список всех профилей
+            profiles = get_profiles_list()
+            
+            if not profiles:
+                self.extensionOperationStatusChanged.emit(False, "Не найдено ни одного профиля")
+                return
                 
-                # Проверяем наличие расширения в папке default_extensions
-                default_extensions_path = DEFAULT_EXTENSIONS_PATH
-                extension_path = os.path.join(default_extensions_path, extension_id)
+            logger.info(f"Установка расширения {extension_id} для всех профилей (replace={replace})")
+            
+            # Устанавливаем расширение в каждый профиль
+            success_count = 0
+            for profile in profiles:
+                if safe_install_extension(profile, extension_id, replace):
+                    success_count += 1
+                    
+            if success_count == len(profiles):
+                self.extensionOperationStatusChanged.emit(True, f"Расширение успешно установлено во все профили ({success_count})")
+            else:
+                self.extensionOperationStatusChanged.emit(False, f"Расширение установлено только в {success_count} из {len(profiles)} профилей")
                 
-                if not os.path.exists(extension_path):
-                    self.extensionOperationStatusChanged.emit(False, f"Расширение {extension_id} не найдено в папке default_extensions")
-                    return
-                    
-                # Получаем список всех профилей
-                profiles = self.chrome.get_profiles()
-                if not profiles:
-                    self.extensionOperationStatusChanged.emit(False, "Не найдено ни одного профиля")
-                    return
-                    
-                # Устанавливаем расширение для каждого профиля
-                success_count = 0
-                for profile in profiles:
-                    # Проверяем, содержит ли имя профиля префикс "Profile "
-                    if isinstance(profile, str) and profile.startswith("Profile "):
-                        profile_path = profile
-                        # Для передачи в copy_extension нужно убрать префикс
-                        profile_name = profile.replace("Profile ", "")
-                    else:
-                        profile_path = f"Profile {profile}"
-                        profile_name = profile
-                    
-                    # Используем тот же способ формирования путей, что и в терминальном интерфейсе
-                    profile_extensions_path = CHROME_DATA_PATH / profile_path / "Extensions"
-                    os.makedirs(profile_extensions_path, exist_ok=True)
-                    
-                    dest_path = str(profile_extensions_path / extension_id)
-                    if copy_extension(extension_path, dest_path, profile_name, extension_id, replace):
-                        success_count += 1
-                        
-                if success_count > 0:
-                    self.extensionOperationStatusChanged.emit(True, f"Расширение установлено для {success_count} из {len(profiles)} профилей")
-                else:
-                    self.extensionOperationStatusChanged.emit(False, "Не удалось установить расширение ни для одного профиля")
+            # Обновляем список установленных расширений
+            self.getInstalledExtensionsList()
                 
-                # Обновляем список установленных расширений
-                self.getInstalledExtensionsList()
-                    
-            except Exception as e:
-                logger.error(f"Ошибка при установке расширения: {e}")
-                self.extensionOperationStatusChanged.emit(False, f"Ошибка при установке расширения: {e}")
-        
-        # Запускаем задачу в отдельном потоке
-        executor = ThreadPoolExecutor(max_workers=1)
-        executor.submit(install_task)
-        executor.shutdown(wait=False)  # Не блокируем основной поток
-    
-    @Slot(str, bool)
-    def installExtensionForSelectedProfilesWithReplace(self, extension_id, replace):
-        """
-        Устанавливает расширение для выбранных профилей с возможностью замены существующего
-        
-        Args:
-            extension_id: ID расширения в Chrome Web Store
-            replace: Заменять ли существующее расширение
-        """
-        # Запускаем операцию в отдельном потоке, чтобы не блокировать интерфейс
-        def install_task():
-            try:
-                if not self._selected_profiles:
-                    self.extensionOperationStatusChanged.emit(False, "Не выбрано ни одного профиля")
-                    return
-                    
-                logger.info(f"Установка расширения {extension_id} для выбранных профилей: {self._selected_profiles} (replace={replace})")
-                
-                # Проверяем наличие расширения в папке default_extensions
-                default_extensions_path = DEFAULT_EXTENSIONS_PATH
-                extension_path = os.path.join(default_extensions_path, extension_id)
-                
-                if not os.path.exists(extension_path):
-                    self.extensionOperationStatusChanged.emit(False, f"Расширение {extension_id} не найдено в папке default_extensions")
-                    return
-                    
-                # Устанавливаем расширение для каждого выбранного профиля
-                success_count = 0
-                for profile in self._selected_profiles:
-                    # Проверяем, содержит ли имя профиля префикс "Profile "
-                    if isinstance(profile, str) and profile.startswith("Profile "):
-                        profile_path = profile
-                        # Для передачи в copy_extension нужно убрать префикс
-                        profile_name = profile.replace("Profile ", "")
-                    else:
-                        profile_path = f"Profile {profile}"
-                        profile_name = profile
-                    
-                    # Используем тот же способ формирования путей, что и в терминальном интерфейсе
-                    profile_extensions_path = CHROME_DATA_PATH / profile_path / "Extensions"
-                    os.makedirs(profile_extensions_path, exist_ok=True)
-                    
-                    dest_path = str(profile_extensions_path / extension_id)
-                    if copy_extension(extension_path, dest_path, profile_name, extension_id, replace):
-                        success_count += 1
-                        
-                if success_count > 0:
-                    self.extensionOperationStatusChanged.emit(True, f"Расширение установлено для {success_count} из {len(self._selected_profiles)} профилей")
-                else:
-                    self.extensionOperationStatusChanged.emit(False, "Не удалось установить расширение ни для одного профиля")
-                    
-                # Очищаем выбранные профили
-                # self._selected_profiles.clear()
-                # self.selectedProfilesChanged.emit()
-                
-                # Обновляем список установленных расширений
-                self.getInstalledExtensionsList()
-                    
-            except Exception as e:
-                logger.error(f"Ошибка при установке расширения: {e}")
-                self.extensionOperationStatusChanged.emit(False, f"Ошибка при установке расширения: {e}")
-        
-        # Запускаем задачу в отдельном потоке
-        executor = ThreadPoolExecutor(max_workers=1)
-        executor.submit(install_task)
-    
-    @Slot(str)
-    def installExtensionForSelectedProfiles(self, extension_id):
-        """
-        Устанавливает расширение для выбранных профилей
-        
-        Args:
-            extension_id: ID расширения в Chrome Web Store
-        """
-        # Запускаем операцию в отдельном потоке, чтобы не блокировать интерфейс
-        def install_task():
-            try:
-                if not self._selected_profiles:
-                    self.extensionOperationStatusChanged.emit(False, "Не выбрано ни одного профиля")
-                    return
-                    
-                logger.info(f"Установка расширения {extension_id} для выбранных профилей: {self._selected_profiles}")
-                
-                # Проверяем наличие расширения в папке default_extensions
-                default_extensions_path = DEFAULT_EXTENSIONS_PATH
-                extension_path = os.path.join(default_extensions_path, extension_id)
-                
-                if not os.path.exists(extension_path):
-                    self.extensionOperationStatusChanged.emit(False, f"Расширение {extension_id} не найдено в папке default_extensions")
-                    return
-                    
-                # Устанавливаем расширение для каждого выбранного профиля
-                success_count = 0
-                for profile in self._selected_profiles:
-                    # Проверяем, содержит ли имя профиля префикс "Profile "
-                    if isinstance(profile, str) and profile.startswith("Profile "):
-                        profile_path = profile
-                        # Для передачи в copy_extension нужно убрать префикс
-                        profile_name = profile.replace("Profile ", "")
-                    else:
-                        profile_path = f"Profile {profile}"
-                        profile_name = profile
-                    
-                    # Используем тот же способ формирования путей, что и в терминальном интерфейсе
-                    profile_extensions_path = CHROME_DATA_PATH / profile_path / "Extensions"
-                    os.makedirs(profile_extensions_path, exist_ok=True)
-                    
-                    dest_path = str(profile_extensions_path / extension_id)
-                    if copy_extension(extension_path, dest_path, profile_name, extension_id, True):
-                        success_count += 1
-                        
-                if success_count > 0:
-                    self.extensionOperationStatusChanged.emit(True, f"Расширение установлено для {success_count} из {len(self._selected_profiles)} профилей")
-                else:
-                    self.extensionOperationStatusChanged.emit(False, "Не удалось установить расширение ни для одного профиля")
-                    
-                # Очищаем выбранные профили
-                # self._selected_profiles.clear()
-                # self.selectedProfilesChanged.emit()
-                
-                # Обновляем список установленных расширений
-                self.getInstalledExtensionsList()
-                    
-            except Exception as e:
-                logger.error(f"Ошибка при установке расширения: {e}")
-                self.extensionOperationStatusChanged.emit(False, f"Ошибка при установке расширения: {e}")
-        
-        # Запускаем задачу в отдельном потоке
-        executor = ThreadPoolExecutor(max_workers=1)
-        executor.submit(install_task)
-    
+        except Exception as e:
+            logger.error(f"Ошибка при установке расширения: {e}")
+            self.extensionOperationStatusChanged.emit(False, f"Ошибка при установке расширения: {e}")
+            
     @Slot('QVariantList', bool)
     def installMultipleExtensionsForSelectedProfiles(self, extension_ids, replace):
         """
-        Устанавливает несколько расширений для выбранных профилей
+        Безопасно устанавливает несколько расширений для выбранных профилей
         
         Args:
             extension_ids: Список ID расширений
-            replace: Флаг замены существующих расширений
+            replace: Заменять ли существующие расширения
         """
         try:
             if not extension_ids:
@@ -854,202 +725,43 @@ class ProfileManager(QObject):
                 self.extensionOperationStatusChanged.emit(False, "Не выбрано ни одного профиля")
                 return
                 
-            # Создаем копию выбранных профилей, чтобы избежать ошибки "Set changed size during iteration"
-            selected_profiles = list(self._selected_profiles)
+            logger.info(f"Установка расширений {extension_ids} для выбранных профилей: {self._selected_profiles} (replace={replace})")
             
-            logger.info(f"Установка расширений {extension_ids} для выбранных профилей: {selected_profiles}, replace={replace}")
+            # Устанавливаем расширения в каждый выбранный профиль
+            total_operations = len(extension_ids) * len(self._selected_profiles)
+            success_count = 0
             
-            # Запускаем установку в отдельном потоке
-            def install_task():
-                try:
-                    # Проверяем наличие расширений в папке default_extensions
-                    missing_extensions = []
-                    for ext_id in extension_ids:
-                        ext_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
-                        if not os.path.exists(ext_path):
-                            missing_extensions.append(ext_id)
-                    
-                    if missing_extensions:
-                        self.extensionOperationStatusChanged.emit(False, f"Расширения не найдены в папке default_extensions: {', '.join(missing_extensions)}")
-                        return
-                    
-                    # Устанавливаем расширения для каждого выбранного профиля
-                    success_count = 0
-                    total_operations = len(extension_ids) * len(selected_profiles)
-                    
-                    for profile in selected_profiles:
-                        for ext_id in extension_ids:
-                            try:
-                                # Получаем путь к расширению в папке default_extensions
-                                src_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
-                                
-                                # Проверяем, содержит ли имя профиля префикс "Profile "
-                                if isinstance(profile, str) and profile.startswith("Profile "):
-                                    profile_path = profile
-                                    # Для передачи в copy_extension нужно убрать префикс
-                                    profile_name = profile.replace("Profile ", "")
-                                else:
-                                    profile_path = f"Profile {profile}"
-                                    profile_name = profile
-                                
-                                # Формируем путь к папке с расширениями профиля
-                                profile_extensions_path = os.path.join(CHROME_DATA_PATH, profile_path, "Extensions")
-                                
-                                # Создаем папку Extensions, если она не существует
-                                if not os.path.exists(profile_extensions_path):
-                                    os.makedirs(profile_extensions_path)
-                                
-                                # Формируем путь назначения
-                                dest_path = os.path.join(profile_extensions_path, ext_id)
-                                
-                                # Копируем расширение
-                                result = copy_extension(src_path, dest_path, profile_name, ext_id, replace)
-                                
-                                if result:
-                                    success_count += 1
-                                    logger.info(f"Расширение {ext_id} успешно установлено для профиля {profile}")
-                                else:
-                                    logger.error(f"Не удалось установить расширение {ext_id} для профиля {profile}")
-                            except Exception as e:
-                                logger.error(f"Ошибка при установке расширения {ext_id} для профиля {profile}: {e}")
-                    
-                    # Обновляем список расширений
-                    self.getDefaultExtensionsList()
-                    
-                    if success_count == total_operations:
-                        self.extensionOperationStatusChanged.emit(True, f"Все расширения ({len(extension_ids)}) успешно установлены для {len(selected_profiles)} профилей")
-                    else:
-                        self.extensionOperationStatusChanged.emit(True, f"Установлено {success_count} из {total_operations} расширений")
-                    
-                    # Очищаем выбранные профили после завершения операции
-                    self._selected_profiles.clear()
-                    self.selectedProfilesChanged.emit()
+            for profile in self._selected_profiles:
+                for ext_id in extension_ids:
+                    if safe_install_extension(profile, ext_id, replace):
+                        success_count += 1
+                        
+            if success_count == total_operations:
+                self.extensionOperationStatusChanged.emit(True, f"Все расширения успешно установлены во все выбранные профили")
+            else:
+                self.extensionOperationStatusChanged.emit(False, f"Установлено {success_count} из {total_operations} расширений")
                 
-                except Exception as e:
-                    logger.error(f"Ошибка при установке расширений: {e}")
-                    self.extensionOperationStatusChanged.emit(False, f"Ошибка при установке расширений: {e}")
-            
-            # Запускаем задачу в отдельном потоке
-            threading.Thread(target=install_task).start()
-            
+            # Обновляем список установленных расширений
+            self.getInstalledExtensionsList()
+                
         except Exception as e:
             logger.error(f"Ошибка при установке расширений: {e}")
             self.extensionOperationStatusChanged.emit(False, f"Ошибка при установке расширений: {e}")
-    
+            
     @Slot('QVariantList', bool)
     def installMultipleExtensionsForAllProfiles(self, extension_ids, replace):
         """
-        Устанавливает несколько расширений для всех профилей
+        Безопасно устанавливает несколько расширений для всех профилей
         
         Args:
             extension_ids: Список ID расширений
-            replace: Флаг замены существующих расширений
+            replace: Заменять ли существующие расширения
         """
         try:
             if not extension_ids:
                 self.extensionOperationStatusChanged.emit(False, "Не выбрано ни одного расширения")
                 return
                 
-            # Создаем копию списка расширений, чтобы избежать ошибки "Set changed size during iteration"
-            extension_ids_list = list(extension_ids)
-            
-            logger.info(f"Установка расширений {extension_ids_list} для всех профилей, replace={replace}")
-            
-            # Запускаем установку в отдельном потоке
-            def install_task():
-                try:
-                    # Проверяем наличие расширений в папке default_extensions
-                    missing_extensions = []
-                    for ext_id in extension_ids_list:
-                        ext_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
-                        if not os.path.exists(ext_path):
-                            missing_extensions.append(ext_id)
-                    
-                    if missing_extensions:
-                        self.extensionOperationStatusChanged.emit(False, f"Расширения не найдены в папке default_extensions: {', '.join(missing_extensions)}")
-                        return
-                    
-                    # Получаем список всех профилей
-                    profiles = get_profiles_list()
-                    
-                    # Устанавливаем расширения для каждого профиля
-                    success_count = 0
-                    total_operations = len(extension_ids_list) * len(profiles)
-                    
-                    for profile in profiles:
-                        for ext_id in extension_ids_list:
-                            try:
-                                # Получаем путь к расширению в папке default_extensions
-                                src_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
-                                
-                                # Проверяем, содержит ли имя профиля префикс "Profile "
-                                if isinstance(profile, str) and profile.startswith("Profile "):
-                                    profile_path = profile
-                                    # Для передачи в copy_extension нужно убрать префикс
-                                    profile_name = profile.replace("Profile ", "")
-                                else:
-                                    profile_path = f"Profile {profile}"
-                                    profile_name = profile
-                                
-                                # Формируем путь к папке с расширениями профиля
-                                profile_extensions_path = os.path.join(CHROME_DATA_PATH, profile_path, "Extensions")
-                                
-                                # Создаем папку Extensions, если она не существует
-                                if not os.path.exists(profile_extensions_path):
-                                    os.makedirs(profile_extensions_path)
-                                
-                                # Формируем путь назначения
-                                dest_path = os.path.join(profile_extensions_path, ext_id)
-                                
-                                # Копируем расширение
-                                result = copy_extension(src_path, dest_path, profile_name, ext_id, replace)
-                                
-                                if result:
-                                    success_count += 1
-                                    logger.info(f"Расширение {ext_id} успешно установлено для профиля {profile}")
-                                else:
-                                    logger.error(f"Не удалось установить расширение {ext_id} для профиля {profile}")
-                            except Exception as e:
-                                logger.error(f"Ошибка при установке расширения {ext_id} для профиля {profile}: {e}")
-                    
-                    # Обновляем список расширений
-                    self.getDefaultExtensionsList()
-                    
-                    if success_count == total_operations:
-                        self.extensionOperationStatusChanged.emit(True, f"Все расширения ({len(extension_ids_list)}) успешно установлены для всех профилей ({len(profiles)})")
-                    else:
-                        self.extensionOperationStatusChanged.emit(True, f"Установлено {success_count} из {total_operations} расширений")
-                    
-                    # Очищаем выбранные профили после завершения операции
-                    self._selected_profiles.clear()
-                    self.selectedProfilesChanged.emit()
-                
-                except Exception as e:
-                    logger.error(f"Ошибка при установке расширений: {e}")
-                    self.extensionOperationStatusChanged.emit(False, f"Ошибка при установке расширений: {e}")
-            
-            # Запускаем задачу в отдельном потоке
-            threading.Thread(target=install_task).start()
-            
-        except Exception as e:
-            logger.error(f"Ошибка при установке расширений: {e}")
-            self.extensionOperationStatusChanged.emit(False, f"Ошибка при установке расширений: {e}")
-    
-    @Slot('QVariantList')
-    def removeMultipleExtensionsFromAllProfiles(self, extension_ids):
-        """
-        Удаляет несколько расширений из всех профилей
-        
-        Args:
-            extension_ids: Список ID расширений
-        """
-        try:
-            if not extension_ids:
-                self.extensionOperationStatusChanged.emit(False, "Не выбрано ни одного расширения")
-                return
-                
-            logger.info(f"Удаление расширений {extension_ids} из всех профилей")
-            
             # Получаем список всех профилей
             profiles = get_profiles_list()
             
@@ -1057,28 +769,33 @@ class ProfileManager(QObject):
                 self.extensionOperationStatusChanged.emit(False, "Не найдено ни одного профиля")
                 return
                 
-            # Удаляем расширения из каждого профиля с использованием ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=general_config['max_workers']) as executor:
-                futures = []
-                for profile in profiles:
-                    # Профиль уже содержит префикс "Profile ", так как мы изменили get_profiles_list
-                    # Функция remove_extensions теперь умеет обрабатывать имена с префиксом
-                    futures.append(executor.submit(remove_extensions, profile, extension_ids))
+            logger.info(f"Установка расширений {extension_ids} для всех профилей (replace={replace})")
+            
+            # Устанавливаем расширения в каждый профиль
+            total_operations = len(extension_ids) * len(profiles)
+            success_count = 0
+            
+            for profile in profiles:
+                for ext_id in extension_ids:
+                    if safe_install_extension(profile, ext_id, replace):
+                        success_count += 1
+                        
+            if success_count == total_operations:
+                self.extensionOperationStatusChanged.emit(True, f"Все расширения успешно установлены во все профили")
+            else:
+                self.extensionOperationStatusChanged.emit(False, f"Установлено {success_count} из {total_operations} расширений")
                 
-                # Ждем завершения всех задач
-                for future in futures:
-                    future.result()
-                    
-            self.extensionOperationStatusChanged.emit(True, f"Расширения удалены из всех профилей")
+            # Обновляем список установленных расширений
+            self.getInstalledExtensionsList()
                 
         except Exception as e:
-            logger.error(f"Ошибка при удалении расширений: {e}")
-            self.extensionOperationStatusChanged.emit(False, f"Ошибка при удалении расширений: {e}")
+            logger.error(f"Ошибка при установке расширений: {e}")
+            self.extensionOperationStatusChanged.emit(False, f"Ошибка при установке расширений: {e}")
     
-    @Slot('QVariantList', bool)
+    @Slot('QVariantList')
     def removeMultipleExtensionsFromSelectedProfiles(self, extension_ids):
         """
-        Удаляет несколько расширений из выбранных профилей
+        Безопасно удаляет несколько расширений из выбранных профилей
         
         Args:
             extension_ids: Список ID расширений
@@ -1096,18 +813,51 @@ class ProfileManager(QObject):
             
             # Удаляем расширения из каждого выбранного профиля
             success_count = 0
-            total_operations = len(extension_ids) * len(self._selected_profiles)
-            
             for profile in self._selected_profiles:
-                # Профиль может содержать или не содержать префикс "Profile "
-                # Функция remove_extensions теперь умеет обрабатывать оба варианта
-                remove_extensions(profile, extension_ids)
-                success_count += 1
-                
+                if safe_remove_extensions(profile, extension_ids):
+                    success_count += 1
+                    
             if success_count == len(self._selected_profiles):
                 self.extensionOperationStatusChanged.emit(True, f"Расширения успешно удалены из {success_count} профилей")
             else:
                 self.extensionOperationStatusChanged.emit(False, f"Расширения удалены только из {success_count} из {len(self._selected_profiles)} профилей")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при удалении расширений: {e}")
+            self.extensionOperationStatusChanged.emit(False, f"Ошибка при удалении расширений: {e}")
+            
+    @Slot('QVariantList')
+    def removeMultipleExtensionsFromAllProfiles(self, extension_ids):
+        """
+        Безопасно удаляет несколько расширений из всех профилей
+        
+        Args:
+            extension_ids: Список ID расширений
+        """
+        try:
+            if not extension_ids:
+                self.extensionOperationStatusChanged.emit(False, "Не выбрано ни одного расширения")
+                return
+                
+            # Получаем список всех профилей
+            profiles = get_profiles_list()
+            
+            if not profiles:
+                self.extensionOperationStatusChanged.emit(False, "Не найдено ни одного профиля")
+                return
+                
+            logger.info(f"Удаление расширений {extension_ids} из всех профилей")
+            
+            # Удаляем расширения из каждого профиля
+            success_count = 0
+            for profile in profiles:
+                if safe_remove_extensions(profile, extension_ids):
+                    success_count += 1
+                    
+            if success_count == len(profiles):
+                self.extensionOperationStatusChanged.emit(True, f"Расширения успешно удалены из всех профилей ({success_count})")
+            else:
+                self.extensionOperationStatusChanged.emit(False, f"Расширения удалены только из {success_count} из {len(profiles)} профилей")
                 
         except Exception as e:
             logger.error(f"Ошибка при удалении расширений: {e}")
@@ -1279,6 +1029,48 @@ class ProfileManager(QObject):
             logger.error(f"Ошибка при получении списка дефолтных расширений: {e}")
             self.extensionOperationStatusChanged.emit(False, f"Ошибка при получении списка дефолтных расширений: {e}")
     
+    def get_localized_string(self, ext_path, message_key):
+        """
+        Получает локализованную строку из файла локализации расширения
+        
+        Args:
+            ext_path: Путь к папке расширения
+            message_key: Ключ сообщения (без __MSG_ и __)
+            
+        Returns:
+            str: Локализованная строка или исходный ключ, если строка не найдена
+        """
+        try:
+            # Читаем манифест для получения локали по умолчанию
+            manifest_path = os.path.join(ext_path, "manifest.json")
+            if not os.path.exists(manifest_path):
+                return message_key
+                
+            with open(manifest_path, 'r', encoding='utf-8') as f:
+                manifest = json.load(f)
+                
+            # Получаем локаль по умолчанию
+            default_locale = manifest.get('default_locale', 'en')
+            
+            # Формируем путь к файлу локализации
+            messages_path = os.path.join(ext_path, "_locales", default_locale, "messages.json")
+            if not os.path.exists(messages_path):
+                # Пробуем найти файл локализации в en_US
+                messages_path = os.path.join(ext_path, "_locales", "en_US", "messages.json")
+                if not os.path.exists(messages_path):
+                    return message_key
+                    
+            # Читаем файл локализации
+            with open(messages_path, 'r', encoding='utf-8') as f:
+                messages = json.load(f)
+                
+            # Получаем локализованную строку
+            message = messages.get(message_key, {}).get('message', message_key)
+            return message
+        except Exception as e:
+            logger.error(f"Ошибка при получении локализованной строки: {e}")
+            return message_key
+
     @Slot(str)
     def getProfileExtensions(self, profile):
         """
@@ -1296,72 +1088,141 @@ class ProfileManager(QObject):
             else:
                 profile_path = profile
             
-            # Формируем путь к папке с расширениями профиля
+            # Формируем пути к папкам с расширениями профиля
             profile_extensions_path = Path(CHROME_DATA_PATH) / profile_path / "Extensions"
+            profile_settings_path = Path(CHROME_DATA_PATH) / profile_path / "Local Extension Settings"
             
-            if not profile_extensions_path.exists():
-                self.extensionOperationStatusChanged.emit(False, f"Папка с расширениями профиля {profile} не найдена")
-                return
-                
-            # Получаем список расширений из профиля
+            # Получаем список ID расширений из обеих папок
+            extension_ids = set()
+            
+            # Проверяем папку Extensions
+            if profile_extensions_path.exists():
+                extension_ids.update(os.listdir(profile_extensions_path))
+            
+            # Проверяем папку Local Extension Settings
+            if profile_settings_path.exists():
+                extension_ids.update(os.listdir(profile_settings_path))
+            
+            logger.info(f"Найдено {len(extension_ids)} уникальных ID расширений")
+            
+            # Получаем информацию о каждом расширении
             extensions_list = []
             
-            for ext_id in os.listdir(profile_extensions_path):
+            for ext_id in extension_ids:
                 ext_path = profile_extensions_path / ext_id
-                if not os.path.isdir(ext_path):
-                    continue
-                    
-                # Находим последнюю версию расширения
-                versions = [v for v in os.listdir(ext_path) if os.path.isdir(ext_path / v)]
-                if not versions:
-                    continue
-                    
-                # Берем последнюю версию (обычно самую новую)
-                latest_version = sorted(versions)[-1]
-                ext_manifest_path = ext_path / latest_version / "manifest.json"
                 
-                # Получаем информацию о расширении из манифеста
-                ext_name = ext_id
-                ext_version = latest_version
-                ext_icon_path = ""
-                
-                if os.path.exists(ext_manifest_path):
-                    try:
-                        with open(ext_manifest_path, 'r', encoding='utf-8') as f:
-                            manifest = json.load(f)
-                            ext_name = manifest.get('name', ext_id)
-                            ext_version = manifest.get('version', latest_version)
+                # Если расширение есть в папке Extensions или Local Extension Settings
+                if ext_path.exists() and ext_path.is_dir():
+                    # Находим последнюю версию расширения
+                    versions = [v for v in os.listdir(ext_path) if os.path.isdir(ext_path / v)]
+                    if versions:
+                        latest_version = sorted(versions)[-1]
+                        ext_manifest_path = ext_path / latest_version / "manifest.json"
+                        
+                        # Получаем информацию о расширении из манифеста
+                        ext_name = ext_id
+                        ext_version = latest_version
+                        ext_icon_path = ""
+                        
+                        if os.path.exists(ext_manifest_path):
+                            try:
+                                with open(ext_manifest_path, 'r', encoding='utf-8') as f:
+                                    manifest = json.load(f)
+                                    
+                                    # Получаем имя расширения
+                                    ext_name = manifest.get('name', ext_id)
+                                    
+                                    # Если имя локализовано, получаем его из локализации
+                                    if isinstance(ext_name, str) and ext_name.startswith('__MSG_'):
+                                        msg_key = ext_name[6:-2]  # Убираем '__MSG_' и '__'
+                                        localized_name = self.get_localized_string(str(ext_path / latest_version), msg_key)
+                                        if localized_name:
+                                            ext_name = localized_name
+                                    
+                                    ext_version = manifest.get('version', latest_version)
+                                    
+                                    # Получаем путь к иконке
+                                    icons = manifest.get('icons', {})
+                                    icon_sizes = sorted([int(size) for size in icons.keys() if size.isdigit()], reverse=True)
+                                    
+                                    if icon_sizes:
+                                        icon_file = icons[str(icon_sizes[0])]
+                                        ext_icon_path = str(ext_path / latest_version / icon_file)
+                            except Exception as e:
+                                logger.error(f"Ошибка при чтении манифеста расширения {ext_id}: {e}")
+                        
+                        # Преобразуем путь к иконке в URL для QML
+                        ext_icon_url = ""
+                        if ext_icon_path and os.path.exists(ext_icon_path):
+                            try:
+                                path_obj = Path(ext_icon_path)
+                                ext_icon_url = QUrl.fromLocalFile(str(path_obj)).toString()
+                            except Exception as e:
+                                logger.error(f"Ошибка при формировании URL для иконки: {e}")
+                        
+                        extensions_list.append({
+                            "id": ext_id,
+                            "name": ext_name,
+                            "version": ext_version,
+                            "iconUrl": ext_icon_url
+                        })
+                # Если расширение есть только в Local Extension Settings
+                elif (profile_settings_path / ext_id).exists():
+                    # Пытаемся получить информацию о расширении из default_extensions
+                    default_ext_path = Path(DEFAULT_EXTENSIONS_PATH) / ext_id
+                    if default_ext_path.exists():
+                        versions = [v for v in os.listdir(default_ext_path) if os.path.isdir(default_ext_path / v)]
+                        if versions:
+                            latest_version = sorted(versions)[-1]
+                            ext_manifest_path = default_ext_path / latest_version / "manifest.json"
                             
-                            # Получаем путь к иконке
-                            icons = manifest.get('icons', {})
-                            icon_sizes = sorted([int(size) for size in icons.keys() if size.isdigit()], reverse=True)
-                            
-                            if icon_sizes:
-                                icon_file = icons[str(icon_sizes[0])]
-                                ext_icon_path = str(ext_path / latest_version / icon_file)
-                    except Exception as e:
-                        logger.error(f"Ошибка при чтении манифеста расширения {ext_id}: {e}")
-                
-                # Преобразуем путь к иконке в URL для QML
-                ext_icon_url = ""
-                if ext_icon_path and os.path.exists(ext_icon_path):
-                    try:
-                        # Используем pathlib для корректного формирования URL
-                        path_obj = Path(ext_icon_path)
-                        # Преобразуем путь в строку с прямыми слешами
-                        ext_icon_url = QUrl.fromLocalFile(str(path_obj)).toString()
-                    except Exception as e:
-                        logger.error(f"Ошибка при формировании URL для иконки: {e}")
-                
-                extensions_list.append({
-                    "id": ext_id,
-                    "name": ext_name,
-                    "version": ext_version,
-                    "iconUrl": ext_icon_url
-                })
+                            if os.path.exists(ext_manifest_path):
+                                try:
+                                    with open(ext_manifest_path, 'r', encoding='utf-8') as f:
+                                        manifest = json.load(f)
+                                        ext_name = manifest.get('name', ext_id)
+                                        
+                                        # Если имя локализовано, получаем его из локализации
+                                        if isinstance(ext_name, str) and ext_name.startswith('__MSG_'):
+                                            msg_key = ext_name[6:-2]
+                                            localized_name = self.get_localized_string(str(default_ext_path / latest_version), msg_key)
+                                            if localized_name:
+                                                ext_name = localized_name
+                                        
+                                        ext_version = manifest.get('version', latest_version)
+                                        
+                                        # Получаем путь к иконке
+                                        icons = manifest.get('icons', {})
+                                        icon_sizes = sorted([int(size) for size in icons.keys() if size.isdigit()], reverse=True)
+                                        
+                                        ext_icon_url = ""
+                                        if icon_sizes:
+                                            icon_file = icons[str(icon_sizes[0])]
+                                            ext_icon_path = str(default_ext_path / latest_version / icon_file)
+                                            if os.path.exists(ext_icon_path):
+                                                path_obj = Path(ext_icon_path)
+                                                ext_icon_url = QUrl.fromLocalFile(str(path_obj)).toString()
+                                        
+                                        extensions_list.append({
+                                            "id": ext_id,
+                                            "name": ext_name,
+                                            "version": ext_version,
+                                            "iconUrl": ext_icon_url
+                                        })
+                                except Exception as e:
+                                    logger.error(f"Ошибка при чтении манифеста расширения {ext_id} из default_extensions: {e}")
+                    else:
+                        # Если расширение не найдено в default_extensions, добавляем его с базовой информацией
+                        extensions_list.append({
+                            "id": ext_id,
+                            "name": f"Расширение {ext_id[:8]}...",
+                            "version": "Неизвестно",
+                            "iconUrl": ""
+                        })
             
             # Отправляем список расширений в QML
             self.extensionsListChanged.emit(extensions_list)
+            logger.info(f"Отправлено {len(extensions_list)} расширений в QML")
             
         except Exception as e:
             logger.error(f"Ошибка при получении списка расширений из профиля {profile}: {e}")

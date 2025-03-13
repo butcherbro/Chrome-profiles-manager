@@ -84,6 +84,38 @@ def copy_extension(src_path: str, dest_path: str, profile: str | int, ext_id: st
         logger.debug(f"copy_extension: ext_id={ext_id}, type={type(ext_id)}")
         logger.debug(f"copy_extension: replace={replace}, type={type(replace)}")
         
+        # Проверяем, содержит ли имя профиля префикс "Profile "
+        if isinstance(profile, str) and profile.startswith("Profile "):
+            profile_path = profile
+        else:
+            profile_path = f"Profile {profile}"
+            
+        # Путь к файлу Preferences
+        preferences_path = os.path.join(CHROME_DATA_PATH, profile_path, "Preferences")
+        
+        # Создаем резервную копию Preferences если он существует
+        if os.path.exists(preferences_path):
+            backup_path = preferences_path + ".backup"
+            shutil.copy2(preferences_path, backup_path)
+            logger.debug(f'Создана резервная копия Preferences для профиля {profile}')
+            
+            # Читаем текущие настройки
+            with open(preferences_path, 'r', encoding='utf-8') as f:
+                preferences = json.load(f)
+                
+            # Инициализируем структуру если её нет
+            if 'extensions' not in preferences:
+                preferences['extensions'] = {}
+            if 'pinned_extensions' not in preferences['extensions']:
+                preferences['extensions']['pinned_extensions'] = []
+        else:
+            # Создаем новый файл Preferences если его нет
+            preferences = {
+                'extensions': {
+                    'pinned_extensions': []
+                }
+            }
+        
         # Проверяем, содержит ли src_path уже версию расширения
         # Если в src_path есть папки и в одной из них есть manifest.json, 
         # то это значит, что src_path содержит версию расширения
@@ -124,6 +156,15 @@ def copy_extension(src_path: str, dest_path: str, profile: str | int, ext_id: st
                 shutil.copytree(src_path, version_dest_path)
                 logger.info(f'✅  {profile} - добавлено/заменено расширение {ext_id} (версия {version})')
             
+            # Добавляем расширение в pinned_extensions если его там нет
+            if ext_id not in preferences['extensions']['pinned_extensions']:
+                preferences['extensions']['pinned_extensions'].append(ext_id)
+                logger.debug(f'{profile} - расширение {ext_id} добавлено в pinned_extensions')
+            
+            # Сохраняем обновленные настройки
+            with open(preferences_path, 'w', encoding='utf-8') as f:
+                json.dump(preferences, f, indent=4)
+                
             return True
         else:
             if os.path.exists(dest_path):
@@ -148,6 +189,16 @@ def copy_extension(src_path: str, dest_path: str, profile: str | int, ext_id: st
                         shutil.copytree(version_src_path, version_dest_path)
                     
                     logger.info(f'✅  {profile} - добавлены новые версии расширения {ext_id}: {", ".join(new_versions)}')
+                    
+                    # Добавляем расширение в pinned_extensions если его там нет
+                    if ext_id not in preferences['extensions']['pinned_extensions']:
+                        preferences['extensions']['pinned_extensions'].append(ext_id)
+                        logger.debug(f'{profile} - расширение {ext_id} добавлено в pinned_extensions')
+                    
+                    # Сохраняем обновленные настройки
+                    with open(preferences_path, 'w', encoding='utf-8') as f:
+                        json.dump(preferences, f, indent=4)
+                        
                     return True
                 else:
                     logger.debug(f'{profile} - расширение {ext_id} уже существует, пропущено')
@@ -173,6 +224,15 @@ def copy_extension(src_path: str, dest_path: str, profile: str | int, ext_id: st
                     version_dest_path = os.path.join(dest_path, version)
                     shutil.copytree(src_path, version_dest_path)
                     logger.info(f'✅  {profile} - добавлено расширение {ext_id} (версия {version})')
+                
+                # Добавляем расширение в pinned_extensions если его там нет
+                if ext_id not in preferences['extensions']['pinned_extensions']:
+                    preferences['extensions']['pinned_extensions'].append(ext_id)
+                    logger.debug(f'{profile} - расширение {ext_id} добавлено в pinned_extensions')
+                
+                # Сохраняем обновленные настройки
+                with open(preferences_path, 'w', encoding='utf-8') as f:
+                    json.dump(preferences, f, indent=4)
                 
                 return True
     except Exception as e:
@@ -246,6 +306,7 @@ def remove_extensions(profile: str | int, ext_ids: list[str]) -> None:
         
     extensions_path = os.path.join(CHROME_DATA_PATH, profile_path, "Extensions")
     extensions_settings_path = os.path.join(CHROME_DATA_PATH, profile_path, "Local Extension Settings")
+    preferences_path = os.path.join(CHROME_DATA_PATH, profile_path, "Preferences")
 
     for ext_id in ext_ids:
         ext_path = os.path.join(extensions_path, ext_id)
@@ -266,6 +327,40 @@ def remove_extensions(profile: str | int, ext_ids: list[str]) -> None:
         except Exception as e:
             logger.error(f'⛔  {profile} - не удалоcь удалить локальные настройки расширения {ext_id}')
             logger.debug(f'{profile} - не удалоcь удалить локальные настройки расширения {ext_id}, причина: {e}')
+
+    # Обновляем файл Preferences
+    try:
+        if os.path.exists(preferences_path):
+            with open(preferences_path, 'r', encoding='utf-8') as f:
+                preferences = json.load(f)
+
+            # Удаляем информацию об удаленных расширениях
+            if 'extensions' in preferences:
+                for ext_id in ext_ids:
+                    # Удаляем из chrome_url_overrides
+                    if 'chrome_url_overrides' in preferences['extensions']:
+                        preferences['extensions']['chrome_url_overrides'] = {}
+
+                    # Удаляем из settings
+                    if 'settings' in preferences['extensions']:
+                        if ext_id in preferences['extensions']['settings']:
+                            del preferences['extensions']['settings'][ext_id]
+
+                    # Удаляем из pinned_extensions
+                    if 'pinned_extensions' in preferences['extensions']:
+                        if ext_id in preferences['extensions']['pinned_extensions']:
+                            preferences['extensions']['pinned_extensions'].remove(ext_id)
+
+            # Сохраняем обновленные настройки
+            with open(preferences_path, 'w', encoding='utf-8') as f:
+                json.dump(preferences, f, indent=4)
+
+            logger.info(f'{profile} - файл Preferences обновлен')
+        else:
+            logger.warning(f'{profile} - файл Preferences не найден')
+    except Exception as e:
+        logger.error(f'⛔  {profile} - не удалось обновить файл Preferences')
+        logger.debug(f'{profile} - не удалось обновить файл Preferences, причина: {e}')
 
 
 def get_all_default_extensions_info() -> dict:
@@ -402,17 +497,17 @@ def get_extension_icon_path(extension_path: str) -> str:
                 with open(manifest_path, 'r', encoding='utf-8') as f:
                     manifest = json.load(f)
                     
-                    # Проверяем разные варианты расположения иконки
-                    icons = manifest.get("icons", {})
-                    if icons:
-                        # Предпочитаем иконки в порядке убывания размера
-                        for size in ["128", "64", "48", "32", "16"]:
-                            if size in icons:
-                                icon_path = icons[size]
-                                full_path = os.path.join(extension_path, icon_path)
-                                if os.path.exists(full_path):
-                                    logger.debug(f"Найдена иконка размера {size} для расширения: {full_path}")
-                                    return full_path
+                # Проверяем разные варианты расположения иконки
+                icons = manifest.get("icons", {})
+                if icons:
+                    # Предпочитаем иконки в порядке убывания размера
+                    for size in ["128", "64", "48", "32", "16"]:
+                        if size in icons:
+                            icon_path = icons[size]
+                            full_path = os.path.join(extension_path, icon_path)
+                            if os.path.exists(full_path):
+                                logger.debug(f"Найдена иконка размера {size} для расширения: {full_path}")
+                                return full_path
                         
                         # Если не нашли по предпочтительным размерам, берем первую доступную
                         icon_path = next(iter(icons.values()))
@@ -634,4 +729,302 @@ def delete_profile(profile: str | int) -> bool:
     except Exception as e:
         logger.error(f"⛔ Не удалось удалить профиль {profile}")
         logger.debug(f"Не удалось удалить профиль {profile}, причина: {e}")
+        return False
+
+
+def restore_default_extensions(profile: str | int) -> None:
+    """
+    Восстанавливает все расширения из папки default_extensions в указанный профиль
+    
+    Args:
+        profile: Имя или номер профиля
+    """
+    try:
+        # Получаем список всех расширений в папке default_extensions
+        default_extensions = os.listdir(DEFAULT_EXTENSIONS_PATH)
+        
+        # Проверяем, содержит ли имя профиля префикс "Profile "
+        if isinstance(profile, str) and profile.startswith("Profile "):
+            profile_path = profile
+        else:
+            profile_path = f"Profile {profile}"
+            
+        # Путь к папке расширений профиля
+        profile_extensions_path = os.path.join(CHROME_DATA_PATH, profile_path, "Extensions")
+        preferences_path = os.path.join(CHROME_DATA_PATH, profile_path, "Preferences")
+        
+        # Создаем папку расширений, если она не существует
+        os.makedirs(profile_extensions_path, exist_ok=True)
+        
+        # Создаем резервную копию Preferences если он существует
+        if os.path.exists(preferences_path):
+            backup_path = preferences_path + ".backup"
+            shutil.copy2(preferences_path, backup_path)
+            logger.debug(f'Создана резервная копия Preferences для профиля {profile}')
+            
+            # Читаем текущие настройки
+            with open(preferences_path, 'r', encoding='utf-8') as f:
+                preferences = json.load(f)
+                
+            # Инициализируем структуру если её нет
+            if 'extensions' not in preferences:
+                preferences['extensions'] = {}
+            if 'pinned_extensions' not in preferences['extensions']:
+                preferences['extensions']['pinned_extensions'] = []
+        else:
+            # Создаем новый файл Preferences если его нет
+            preferences = {
+                'extensions': {
+                    'pinned_extensions': []
+                }
+            }
+        
+        # Копируем каждое расширение и обновляем Preferences
+        for ext_id in default_extensions:
+            src_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
+            if os.path.isdir(src_path):
+                dest_path = os.path.join(profile_extensions_path, ext_id)
+                if copy_extension(src_path, dest_path, profile, ext_id, replace=True):
+                    # Добавляем расширение в pinned_extensions если его там нет
+                    if ext_id not in preferences['extensions']['pinned_extensions']:
+                        preferences['extensions']['pinned_extensions'].append(ext_id)
+                        logger.debug(f'{profile} - расширение {ext_id} добавлено в pinned_extensions')
+        
+        # Сохраняем обновленные настройки
+        with open(preferences_path, 'w', encoding='utf-8') as f:
+            json.dump(preferences, f, indent=4)
+            
+        logger.info(f'✅  {profile} - все расширения восстановлены из папки default_extensions')
+    except Exception as e:
+        logger.error(f'⛔  {profile} - не удалось восстановить расширения')
+        logger.debug(f'{profile} - не удалось восстановить расширения, причина: {e}')
+
+
+def safe_remove_extensions(profile: str | int, ext_ids: list[str]) -> bool:
+    """
+    Безопасно удаляет расширения только из указанного профиля
+    
+    Args:
+        profile: Имя или номер профиля
+        ext_ids: Список ID расширений для удаления
+        
+    Returns:
+        bool: True если операция успешна, False в случае ошибки
+    """
+    try:
+        # Проверяем, содержит ли имя профиля префикс "Profile "
+        if isinstance(profile, str) and profile.startswith("Profile "):
+            profile_path = profile
+        else:
+            profile_path = f"Profile {profile}"
+            
+        # Формируем пути
+        profile_dir = os.path.join(CHROME_DATA_PATH, profile_path)
+        extensions_path = os.path.join(profile_dir, "Extensions")
+        extensions_settings_path = os.path.join(profile_dir, "Local Extension Settings")
+        preferences_path = os.path.join(profile_dir, "Preferences")
+        
+        # Проверяем существование профиля
+        if not os.path.exists(profile_dir):
+            logger.error(f'⛔ Профиль {profile} не существует')
+            return False
+            
+        # Создаем резервную копию Preferences
+        if os.path.exists(preferences_path):
+            backup_path = preferences_path + ".backup"
+            shutil.copy2(preferences_path, backup_path)
+            logger.debug(f'Создана резервная копия Preferences для профиля {profile}')
+        
+        success = True
+        for ext_id in ext_ids:
+            try:
+                # Удаляем файлы расширения
+                ext_path = os.path.join(extensions_path, ext_id)
+                if os.path.exists(ext_path):
+                    shutil.rmtree(ext_path)
+                    logger.info(f'✅ {profile} - расширение {ext_id} удалено')
+                
+                # Удаляем настройки расширения
+                ext_settings_path = os.path.join(extensions_settings_path, ext_id)
+                if os.path.exists(ext_settings_path):
+                    shutil.rmtree(ext_settings_path)
+                    logger.info(f'✅ {profile} - настройки расширения {ext_id} удалены')
+                    
+                # Обновляем Preferences
+                if os.path.exists(preferences_path):
+                    try:
+                        with open(preferences_path, 'r', encoding='utf-8') as f:
+                            preferences = json.load(f)
+                        
+                        if 'extensions' in preferences:
+                            # Удаляем из chrome_url_overrides
+                            if 'chrome_url_overrides' in preferences['extensions']:
+                                preferences['extensions']['chrome_url_overrides'] = {}
+                            
+                            # Удаляем из settings
+                            if 'settings' in preferences['extensions']:
+                                if ext_id in preferences['extensions']['settings']:
+                                    del preferences['extensions']['settings'][ext_id]
+                            
+                            # Удаляем из pinned_extensions
+                            if 'pinned_extensions' in preferences['extensions']:
+                                if ext_id in preferences['extensions']['pinned_extensions']:
+                                    preferences['extensions']['pinned_extensions'].remove(ext_id)
+                        
+                        # Сохраняем обновленные настройки
+                        with open(preferences_path, 'w', encoding='utf-8') as f:
+                            json.dump(preferences, f, indent=4)
+                            
+                        logger.info(f'✅ {profile} - настройки расширения {ext_id} обновлены в Preferences')
+                    except Exception as e:
+                        logger.error(f'⛔ {profile} - ошибка при обновлении Preferences: {e}')
+                        success = False
+                        
+            except Exception as e:
+                logger.error(f'⛔ {profile} - ошибка при удалении расширения {ext_id}: {e}')
+                success = False
+        
+        return success
+    except Exception as e:
+        logger.error(f'⛔ Ошибка при удалении расширений из профиля {profile}: {e}')
+        return False
+
+
+def safe_install_extension(profile: str | int, ext_id: str, replace: bool = False) -> bool:
+    """
+    Безопасно устанавливает расширение в указанный профиль
+    
+    Args:
+        profile: Имя или номер профиля
+        ext_id: ID расширения
+        replace: Заменять ли существующее расширение
+        
+    Returns:
+        bool: True если операция успешна, False в случае ошибки
+    """
+    try:
+        # Проверяем, содержит ли имя профиля префикс "Profile "
+        if isinstance(profile, str) and profile.startswith("Profile "):
+            profile_path = profile
+            profile_name = profile.replace("Profile ", "")
+        else:
+            profile_path = f"Profile {profile}"
+            profile_name = str(profile)
+            
+        # Формируем пути
+        profile_dir = os.path.join(CHROME_DATA_PATH, profile_path)
+        extensions_path = os.path.join(profile_dir, "Extensions")
+        preferences_path = os.path.join(profile_dir, "Preferences")
+        
+        # Проверяем существование профиля
+        if not os.path.exists(profile_dir):
+            logger.error(f'⛔ Профиль {profile} не существует')
+            return False
+            
+        # Проверяем наличие расширения в default_extensions
+        src_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
+        if not os.path.exists(src_path):
+            logger.error(f'⛔ Расширение {ext_id} не найдено в папке default_extensions')
+            return False
+            
+        # Создаем папку Extensions, если она не существует
+        os.makedirs(extensions_path, exist_ok=True)
+        
+        # Создаем резервную копию Preferences
+        if os.path.exists(preferences_path):
+            backup_path = preferences_path + ".backup"
+            shutil.copy2(preferences_path, backup_path)
+            logger.debug(f'Создана резервная копия Preferences для профиля {profile}')
+        
+        # Устанавливаем расширение
+        dest_path = os.path.join(extensions_path, ext_id)
+        result = copy_extension(src_path, dest_path, profile_name, ext_id, replace)
+        
+        if result:
+            # Обновляем Preferences
+            if os.path.exists(preferences_path):
+                try:
+                    with open(preferences_path, 'r', encoding='utf-8') as f:
+                        preferences = json.load(f)
+                    
+                    # Создаем структуру extensions если её нет
+                    if 'extensions' not in preferences:
+                        preferences['extensions'] = {}
+                    
+                    # Добавляем расширение в pinned_extensions
+                    if 'pinned_extensions' not in preferences['extensions']:
+                        preferences['extensions']['pinned_extensions'] = []
+                    
+                    if ext_id not in preferences['extensions']['pinned_extensions']:
+                        preferences['extensions']['pinned_extensions'].append(ext_id)
+                        
+                    # Сохраняем обновленные настройки
+                    with open(preferences_path, 'w', encoding='utf-8') as f:
+                        json.dump(preferences, f, indent=4)
+                        
+                    logger.info(f'✅ {profile} - расширение {ext_id} добавлено в Preferences')
+                except Exception as e:
+                    logger.error(f'⛔ {profile} - ошибка при обновлении Preferences: {e}')
+                    return False
+            
+            logger.info(f'✅ {profile} - расширение {ext_id} успешно установлено')
+            return True
+        else:
+            logger.error(f'⛔ {profile} - не удалось установить расширение {ext_id}')
+            return False
+            
+    except Exception as e:
+        logger.error(f'⛔ Ошибка при установке расширения {ext_id} в профиль {profile}: {e}')
+        return False
+
+
+def safe_restore_profile_extensions(profile: str | int) -> bool:
+    """
+    Безопасно восстанавливает все расширения из default_extensions в указанный профиль
+    
+    Args:
+        profile: Имя или номер профиля
+        
+    Returns:
+        bool: True если операция успешна, False в случае ошибки
+    """
+    try:
+        # Проверяем, содержит ли имя профиля префикс "Profile "
+        if isinstance(profile, str) and profile.startswith("Profile "):
+            profile_path = profile
+            profile_name = profile.replace("Profile ", "")
+        else:
+            profile_path = f"Profile {profile}"
+            profile_name = str(profile)
+            
+        # Формируем пути
+        profile_dir = os.path.join(CHROME_DATA_PATH, profile_path)
+        extensions_path = os.path.join(profile_dir, "Extensions")
+        
+        # Проверяем существование профиля
+        if not os.path.exists(profile_dir):
+            logger.error(f'⛔ Профиль {profile} не существует')
+            return False
+            
+        # Создаем папку Extensions, если она не существует
+        os.makedirs(extensions_path, exist_ok=True)
+        
+        # Получаем список расширений из default_extensions
+        success = True
+        for ext_id in os.listdir(DEFAULT_EXTENSIONS_PATH):
+            src_path = os.path.join(DEFAULT_EXTENSIONS_PATH, ext_id)
+            if os.path.isdir(src_path):
+                dest_path = os.path.join(extensions_path, ext_id)
+                if not copy_extension(src_path, dest_path, profile_name, ext_id, True):
+                    success = False
+                    
+        if success:
+            logger.info(f'✅ {profile} - все расширения успешно восстановлены')
+        else:
+            logger.warning(f'⚠️ {profile} - некоторые расширения не удалось восстановить')
+            
+        return success
+            
+    except Exception as e:
+        logger.error(f'⛔ Ошибка при восстановлении расширений в профиль {profile}: {e}')
         return False

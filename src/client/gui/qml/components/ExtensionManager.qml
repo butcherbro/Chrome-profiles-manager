@@ -259,9 +259,9 @@ Window {
                         Layout.fillWidth: true
                     }
                     
-                    // Кнопка для получения расширений из профиля 1
+                    // Кнопка для получения расширений из профиля 0
                     Button {
-                        text: "Из профиля 1"
+                        text: "Из профиля 0"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         
@@ -272,18 +272,18 @@ Window {
                         }
                         
                         onClicked: {
-                            // Получаем список расширений из профиля 1
-                            currentExtensionsSource = "1"
-                            profileManager.getProfileExtensions("1")
+                            // Получаем список расширений из профиля 0
+                            currentExtensionsSource = "0"
+                            profileManager.getProfileExtensions("0")
                         }
                     }
                     
-                    // Кнопка для копирования выбранных расширений из профиля 1 в default_extensions
+                    // Кнопка для копирования выбранных расширений из профиля 0 в default_extensions
                     Button {
                         text: "Копировать выбранные в дефолтные"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
-                        visible: currentExtensionsSource === "1" && selectedExtensions.length > 0
+                        visible: currentExtensionsSource === "0" && selectedExtensions.length > 0
                         
                         background: Rectangle {
                             color: parent.hovered ? "#e0e0e0" : "#f5f5f5"
@@ -292,19 +292,19 @@ Window {
                         }
                         
                         onClicked: {
-                            // Копируем выбранные расширения из профиля 1 в default_extensions
+                            // Копируем выбранные расширения из профиля 0 в default_extensions
                             for (var i = 0; i < selectedExtensions.length; i++) {
-                                profileManager.copyExtensionFromProfileToDefault("1", selectedExtensions[i])
+                                profileManager.copyExtensionFromProfileToDefault("0", selectedExtensions[i])
                             }
                         }
                     }
                     
-                    // Кнопка для копирования всех расширений из профиля 1 в default_extensions
+                    // Кнопка для копирования всех расширений из профиля 0 в default_extensions
                     Button {
                         text: "Копировать все в дефолтные"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
-                        visible: currentExtensionsSource === "1"
+                        visible: currentExtensionsSource === "0"
                         
                         background: Rectangle {
                             color: parent.hovered ? "#e0e0e0" : "#f5f5f5"
@@ -313,8 +313,8 @@ Window {
                         }
                         
                         onClicked: {
-                            // Копируем все расширения из профиля 1 в default_extensions
-                            profileManager.copyAllExtensionsFromProfileToDefault("1")
+                            // Копируем все расширения из профиля 0 в default_extensions
+                            profileManager.copyAllExtensionsFromProfileToDefault("0")
                         }
                     }
                     
@@ -347,7 +347,7 @@ Window {
                     
                     // Кнопка для копирования расширений из профиля в дефолтные
                     Button {
-                        text: "Копировать расширения из профиля 1 в дефолтные"
+                        text: "Копировать расширения из профиля 0 в дефолтные"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         visible: true
@@ -367,16 +367,16 @@ Window {
                         }
                         
                         onClicked: {
-                            // Копируем выбранные расширения из профиля 1 в дефолтные
+                            // Копируем выбранные расширения из профиля 0 в дефолтные
                             for (var i = 0; i < selectedExtensions.length; i++) {
-                                profileManager.copyExtensionFromProfileToDefault("1", selectedExtensions[i])
+                                profileManager.copyExtensionFromProfileToDefault("0", selectedExtensions[i])
                             }
                         }
                     }
                     
-                    // Кнопка для копирования всех расширений из профиля 1 в дефолтные
+                    // Кнопка для копирования всех расширений из профиля 0 в дефолтные
                     Button {
-                        text: "Копировать все расширения из профиля 1 в дефолтные"
+                        text: "Копировать все расширения из профиля 0 в дефолтные"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         
@@ -395,8 +395,8 @@ Window {
                         }
                         
                         onClicked: {
-                            // Копируем все расширения из профиля 1 в дефолтные
-                            profileManager.copyAllExtensionsFromProfileToDefault("1")
+                            // Копируем все расширения из профиля 0 в дефолтные
+                            profileManager.copyAllExtensionsFromProfileToDefault("0")
                         }
                     }
                 }
