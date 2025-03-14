@@ -612,11 +612,15 @@ class ProfileManager(QObject):
         
         Если выполняются скрипты, запрашивает подтверждение у пользователя
         """
+        # Добавляем отладочные логи
+        logger.debug(f"quit_application вызван. _scripts_running = {hasattr(self, '_scripts_running') and self._scripts_running}")
+        
         # Проверяем, выполняются ли скрипты
         if hasattr(self, '_scripts_running') and self._scripts_running:
             logger.warning("Запрос подтверждения закрытия приложения во время выполнения скриптов")
             # Отправляем сигнал для запроса подтверждения у пользователя
             self.confirmApplicationCloseRequested.emit("Выполняются скрипты. Вы уверены, что хотите закрыть приложение? Все незавершенные операции будут прерваны.")
+            logger.debug("Сигнал confirmApplicationCloseRequested отправлен")
             return
             
         logger.info("Завершение работы приложения...")
@@ -1608,19 +1612,21 @@ class ProfileManager(QObject):
             headless: Запускать ли браузер в фоновом режиме
         """
         try:
-            logger.debug(f"run_task начал выполнение")
+            logger.debug(f"_run_chrome_scripts_thread начал выполнение. _scripts_running = {self._scripts_running}")
             logger.debug(f"Выбранные профили в run_task: {self._selected_profiles}")
             
             if not self._selected_profiles:
                 logger.error(f"Не выбрано ни одного профиля")
                 self.scriptOperationStatusChanged.emit(False, "Не выбрано ни одного профиля")
                 self._scripts_running = False
+                logger.debug(f"_scripts_running установлен в False (нет выбранных профилей)")
                 return
             
             if not script_names:
                 logger.error(f"Не выбрано ни одного скрипта")
                 self.scriptOperationStatusChanged.emit(False, "Не выбрано ни одного скрипта")
                 self._scripts_running = False
+                logger.debug(f"_scripts_running установлен в False (нет скриптов для запуска)")
                 return
             
             # Создаем копию выбранных профилей, чтобы избежать ошибки "Set changed size during iteration"
@@ -1681,6 +1687,7 @@ class ProfileManager(QObject):
             if not selected_chrome_script_dirs and not selected_playwright_script_dirs:
                 self.scriptOperationStatusChanged.emit(False, "Не удалось найти выбранные скрипты")
                 self._scripts_running = False
+                logger.debug(f"_scripts_running установлен в False (нет выбранных скриптов)")
                 return
             
             # Запускаем скрипты для каждого профиля
@@ -1719,19 +1726,27 @@ class ProfileManager(QObject):
             else:
                 self.scriptOperationStatusChanged.emit(False, "Не удалось выполнить скрипты ни для одного профиля")
             
-        except Exception as e:
-            logger.error(f"Ошибка при запуске скриптов: {e}")
-            self.scriptOperationStatusChanged.emit(False, f"Ошибка при запуске скриптов: {e}")
-        
-        finally:
-            # Сбрасываем флаг выполнения скриптов
+            # Устанавливаем флаг, что скрипты больше не выполняются
             self._scripts_running = False
+            logger.debug(f"_scripts_running установлен в False (успешное завершение)")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при выполнении скриптов: {e}")
+            self.scriptOperationStatusChanged.emit(False, f"Ошибка при выполнении скриптов: {e}")
+            # Устанавливаем флаг, что скрипты больше не выполняются
+            self._scripts_running = False
+            logger.debug(f"_scripts_running установлен в False (ошибка выполнения)")
+            
+        finally:
+            # Устанавливаем флаг, что скрипты больше не выполняются (на всякий случай)
+            self._scripts_running = False
+            logger.debug(f"_scripts_running установлен в False (finally)")
             
             # Сбрасываем флаг isProcessing
             QMetaObject.invokeMethod(self, "_set_is_processing", Qt.QueuedConnection, Q_ARG(bool, False))
             
             logger.info("===== ОПЕРАЦИЯ ВЫПОЛНЕНИЯ СКРИПТОВ ЗАВЕРШЕНА =====")
-    
+            
     @Slot(bool)
     def _set_is_processing(self, value):
         """
@@ -2460,6 +2475,7 @@ class ProfileManager(QObject):
         даже если выполняются скрипты
         """
         logger.warning("Подтвержденное завершение работы приложения во время выполнения скриптов")
+        logger.debug(f"confirmed_quit_application вызван. _scripts_running = {hasattr(self, '_scripts_running') and self._scripts_running}")
         
         # Закрываем все процессы Chrome, связанные с проектом
         logger.info("Закрытие процессов Chrome, связанных с проектом...")
@@ -2468,6 +2484,7 @@ class ProfileManager(QObject):
         # Устанавливаем флаг выполнения скриптов в False, чтобы избежать проблем при закрытии
         if hasattr(self, '_scripts_running'):
             self._scripts_running = False
+            logger.debug("_scripts_running установлен в False в confirmed_quit_application")
         
         QGuiApplication.quit()
 

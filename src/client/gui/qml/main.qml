@@ -14,8 +14,10 @@ ApplicationWindow {
 
     // Добавляем обработчик закрытия окна
     onClosing: function(close) {
+        console.log("onClosing вызван")
         // Вызываем функцию корректного завершения работы приложения
         profileManager.quit_application()
+        console.log("quit_application вызван из onClosing")
         // Принимаем событие закрытия
         close.accepted = false  // Изменяем на false, чтобы контролировать закрытие через quit_application
     }
@@ -25,12 +27,14 @@ ApplicationWindow {
         target: profileManager
         
         function onApplicationCloseBlockedChanged(message) {
+            console.log("onApplicationCloseBlockedChanged вызван с сообщением: " + message)
             // Показываем уведомление пользователю
             notificationPopup.text = message
             notificationPopup.open()
         }
         
         function onConfirmApplicationCloseRequested(message) {
+            console.log("onConfirmApplicationCloseRequested вызван с сообщением: " + message)
             // Показываем диалог подтверждения закрытия
             confirmCloseDialog.text = message
             confirmCloseDialog.open()
@@ -113,12 +117,16 @@ ApplicationWindow {
                 
                 Button {
                     text: "Отмена"
-                    onClicked: confirmCloseDialog.close()
+                    onClicked: {
+                        console.log("Кнопка 'Отмена' нажата")
+                        confirmCloseDialog.close()
+                    }
                 }
                 
                 Button {
                     text: "Закрыть приложение"
                     onClicked: {
+                        console.log("Кнопка 'Закрыть приложение' нажата")
                         confirmCloseDialog.close()
                         profileManager.confirmed_quit_application()
                     }
