@@ -2,6 +2,7 @@ import os
 import json
 import shutil
 import sys
+import time
 
 from loguru import logger
 
@@ -671,12 +672,33 @@ def read_manifest_name(manifest_path: str) -> str:
 
 
 def kill_chrome_processes() -> None:
+    """
+    Завершает процессы Chrome, связанные с проектом
+    
+    На Windows завершает все процессы Chrome (ограничение системы)
+    На macOS/Linux завершает только процессы Chrome, запущенные с путем к данным проекта
+    """
     try:
         if sys.platform == 'win32':
+            # На Windows сложнее фильтровать процессы по аргументам командной строки,
+            # поэтому завершаем все процессы Chrome
             os.system('taskkill /F /IM chrome.exe')
+            logger.info(f'✅  Все процессы Chrome завершены (Windows)')
         else:
-            os.system('pkill chrome')
-        logger.info(f'✅  Все процессы Chrome завершены')
+            # На macOS/Linux завершаем только процессы Chrome, связанные с проектом
+            # Используем константу CHROME_DATA_PATH для определения пути к данным проекта
+            data_path_str = str(CHROME_DATA_PATH)
+            
+            # Сначала пробуем завершить процессы корректно
+            os.system(f'pkill -f "Chrome --user-data-dir={data_path_str}"')
+            
+            # Даем процессам время на корректное завершение
+            time.sleep(0.5)
+            
+            # Затем принудительно завершаем оставшиеся процессы
+            os.system(f'pkill -9 -f "Chrome --user-data-dir={data_path_str}"')
+            
+            logger.info(f'✅  Процессы Chrome, связанные с проектом, завершены')
     except Exception as e:
         logger.error(f'⛔  Не удалоcь завершить процессы Chrome')
         logger.error(f'⛔  Не удалоcь завершить процессы Chrome, причина: {e}')

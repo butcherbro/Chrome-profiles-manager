@@ -17,7 +17,114 @@ ApplicationWindow {
         // Вызываем функцию корректного завершения работы приложения
         profileManager.quit_application()
         // Принимаем событие закрытия
-        close.accepted = true
+        close.accepted = false  // Изменяем на false, чтобы контролировать закрытие через quit_application
+    }
+    
+    // Обработчик сигнала о блокировке закрытия приложения
+    Connections {
+        target: profileManager
+        
+        function onApplicationCloseBlockedChanged(message) {
+            // Показываем уведомление пользователю
+            notificationPopup.text = message
+            notificationPopup.open()
+        }
+        
+        function onConfirmApplicationCloseRequested(message) {
+            // Показываем диалог подтверждения закрытия
+            confirmCloseDialog.text = message
+            confirmCloseDialog.open()
+        }
+    }
+    
+    // Всплывающее уведомление
+    Popup {
+        id: notificationPopup
+        width: parent.width * 0.8
+        height: notificationText.height + 80  // Увеличиваем высоту для двух кнопок
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        modal: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        
+        property string text: ""
+        
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 10
+            
+            Text {
+                id: notificationText
+                text: notificationPopup.text
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+            
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 10
+                
+                Button {
+                    text: "OK"
+                    onClicked: notificationPopup.close()
+                }
+                
+                Button {
+                    text: "Принудительно закрыть"
+                    onClicked: {
+                        notificationPopup.close()
+                        profileManager.force_quit_application()
+                    }
+                }
+            }
+        }
+    }
+
+    // Диалог подтверждения закрытия приложения
+    Popup {
+        id: confirmCloseDialog
+        width: parent.width * 0.8
+        height: confirmCloseText.height + 80
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        modal: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        
+        property string text: ""
+        
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 10
+            
+            Text {
+                id: confirmCloseText
+                text: confirmCloseDialog.text
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+            
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 10
+                
+                Button {
+                    text: "Отмена"
+                    onClicked: confirmCloseDialog.close()
+                }
+                
+                Button {
+                    text: "Закрыть приложение"
+                    onClicked: {
+                        confirmCloseDialog.close()
+                        profileManager.confirmed_quit_application()
+                    }
+                }
+            }
+        }
     }
 
     // Создаем экземпляры компонентов

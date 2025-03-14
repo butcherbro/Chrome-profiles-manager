@@ -35,6 +35,8 @@ import re
 import csv
 from datetime import datetime
 import uuid
+from PySide6.QtCore import Q_ARG
+from PySide6.QtCore import QMetaObject
 
 class ProfileManager(QObject):
     profilesListChanged = Signal()
@@ -51,6 +53,10 @@ class ProfileManager(QObject):
     # Сигналы для работы со списками профилей
     profileListsChanged = Signal()
     profileListOperationStatusChanged = Signal(bool, str)  # Сигнал для уведомления о статусе операций со списками профилей
+    # Сигнал для уведомления о невозможности закрыть приложение
+    applicationCloseBlockedChanged = Signal(str)  # Сигнал для уведомления о блокировке закрытия приложения
+    # Сигнал для запроса подтверждения закрытия приложения
+    confirmApplicationCloseRequested = Signal(str)  # Сигнал для запроса подтверждения закрытия приложения
 
     def __init__(self):
         super().__init__()
@@ -61,6 +67,7 @@ class ProfileManager(QObject):
         self._manager_scripts_list = []  # Список доступных менеджер-скриптов
         self._profile_lists = []  # Список доступных списков профилей
         self._current_list_id = ""  # Текущий выбранный список профилей
+        self._scripts_running = False  # Флаг, указывающий выполняются ли скрипты в данный момент
         self.update_profiles_list()
         self.updateProfileLists()  # Загружаем списки профилей
         self.engine = None  # Будет установлено позже
@@ -601,11 +608,43 @@ class ProfileManager(QObject):
     @Slot()
     def quit_application(self):
         """
-        Корректно завершает работу приложения
+        Корректно завершает работу приложения и закрывает все процессы Chrome, связанные с проектом
+        
+        Если выполняются скрипты, запрашивает подтверждение у пользователя
         """
+        # Проверяем, выполняются ли скрипты
+        if hasattr(self, '_scripts_running') and self._scripts_running:
+            logger.warning("Запрос подтверждения закрытия приложения во время выполнения скриптов")
+            # Отправляем сигнал для запроса подтверждения у пользователя
+            self.confirmApplicationCloseRequested.emit("Выполняются скрипты. Вы уверены, что хотите закрыть приложение? Все незавершенные операции будут прерваны.")
+            return
+            
         logger.info("Завершение работы приложения...")
+        
+        # Закрываем все процессы Chrome, связанные с проектом
+        logger.info("Закрытие процессов Chrome, связанных с проектом...")
+        kill_chrome_processes()
+        
         QGuiApplication.quit()
         
+    @Slot()
+    def force_quit_application(self):
+        """
+        Принудительно завершает работу приложения и закрывает все процессы Chrome, связанные с проектом,
+        даже если выполняются скрипты
+        """
+        logger.warning("Принудительное завершение работы приложения...")
+        
+        # Закрываем все процессы Chrome, связанные с проектом
+        logger.info("Закрытие процессов Chrome, связанных с проектом...")
+        kill_chrome_processes()
+        
+        # Устанавливаем флаг выполнения скриптов в False, чтобы избежать проблем при закрытии
+        if hasattr(self, '_scripts_running'):
+            self._scripts_running = False
+        
+        QGuiApplication.quit()
+    
     @Slot(str)
     def installExtensionForAllProfiles(self, extension_id):
         """
@@ -1505,11 +1544,28 @@ class ProfileManager(QObject):
         """
         try:
             scripts_path = os.path.join(PROJECT_PATH, "data", "scripts", "chrome")
+            playwright_scripts_path = os.path.join(PROJECT_PATH, "data", "scripts", "playwright")
             scripts = []
             
+            # Получаем скрипты из директории chrome
             if os.path.exists(scripts_path):
                 for script_dir in os.listdir(scripts_path):
                     script_path = os.path.join(scripts_path, script_dir)
+                    if os.path.isdir(script_path):
+                        config_path = os.path.join(script_path, "config.json")
+                        if os.path.exists(config_path):
+                            try:
+                                with open(config_path, 'r', encoding='utf-8') as f:
+                                    config = json.load(f)
+                                    human_name = config.get("human_name", script_dir)
+                                    scripts.append(human_name)
+                            except Exception as e:
+                                logger.error(f"Ошибка при чтении конфигурации скрипта {script_dir}: {e}")
+            
+            # Получаем скрипты из директории playwright
+            if os.path.exists(playwright_scripts_path):
+                for script_dir in os.listdir(playwright_scripts_path):
+                    script_path = os.path.join(playwright_scripts_path, script_dir)
                     if os.path.isdir(script_path):
                         config_path = os.path.join(script_path, "config.json")
                         if os.path.exists(config_path):
@@ -1532,91 +1588,159 @@ class ProfileManager(QObject):
         Запускает выбранные Chrome скрипты для выбранных профилей
         
         Args:
-            script_names: Список названий скриптов
-            headless: Флаг запуска в headless режиме
+            script_names: Список названий скриптов для запуска
+            headless: Запускать ли браузер в фоновом режиме
         """
-        logger.debug(f"runChromeScripts вызван с параметрами: script_names={script_names}, headless={headless}")
-        logger.debug(f"Текущие выбранные профили: {self._selected_profiles}")
+        # Создаем флаг, указывающий, что скрипты выполняются
+        self._scripts_running = True
         
-        # Запускаем операцию в отдельном потоке, чтобы не блокировать интерфейс
-        def run_task():
-            try:
-                logger.debug(f"run_task начал выполнение")
-                logger.debug(f"Выбранные профили в run_task: {self._selected_profiles}")
-                
-                if not self._selected_profiles:
-                    logger.error(f"Не выбрано ни одного профиля")
-                    self.scriptOperationStatusChanged.emit(False, "Не выбрано ни одного профиля")
-                    return
-                    
-                if not script_names:
-                    logger.error(f"Не выбрано ни одного скрипта")
-                    self.scriptOperationStatusChanged.emit(False, "Не выбрано ни одного скрипта")
-                    return
-                    
-                # Создаем копию выбранных профилей, чтобы избежать ошибки "Set changed size during iteration"
-                selected_profiles = list(self._selected_profiles)
-                
-                logger.info(f"Запуск Chrome скриптов {script_names} для профилей: {selected_profiles}, headless={headless}")
-                
-                # Получаем соответствие между человекочитаемыми названиями и директориями скриптов
-                scripts_path = os.path.join(PROJECT_PATH, "data", "scripts", "chrome")
-                script_dirs = {}
-                
-                if os.path.exists(scripts_path):
-                    for script_dir in os.listdir(scripts_path):
-                        script_path = os.path.join(scripts_path, script_dir)
-                        if os.path.isdir(script_path):
-                            config_path = os.path.join(script_path, "config.json")
-                            if os.path.exists(config_path):
-                                try:
-                                    with open(config_path, 'r', encoding='utf-8') as f:
-                                        config = json.load(f)
-                                        human_name = config.get("human_name", script_dir)
-                                        script_dirs[human_name] = script_dir
-                                except Exception as e:
-                                    logger.error(f"Ошибка при чтении конфигурации скрипта {script_dir}: {e}")
-                
-                # Получаем директории выбранных скриптов
-                selected_script_dirs = []
-                for script_name in script_names:
-                    if script_name in script_dirs:
-                        selected_script_dirs.append(script_dirs[script_name])
-                    else:
-                        logger.warning(f"Скрипт {script_name} не найден")
-                
-                if not selected_script_dirs:
-                    self.scriptOperationStatusChanged.emit(False, "Не удалось найти выбранные скрипты")
-                    return
-                
-                # Запускаем скрипты для каждого профиля
-                success_count = 0
-                total_operations = len(selected_profiles)
-                
-                for profile in selected_profiles:
-                    try:
-                        # Если профиль содержит префикс "Profile ", удаляем его перед запуском
-                        if isinstance(profile, str) and profile.startswith("Profile "):
-                            profile_name = profile.replace("Profile ", "")
-                        else:
-                            profile_name = profile
-                            
-                        self.chrome.run_scripts(profile_name, selected_script_dirs, headless)
-                        success_count += 1
-                    except Exception as e:
-                        logger.error(f"Ошибка при запуске скриптов для профиля {profile}: {e}")
-                
-                if success_count == total_operations:
-                    self.scriptOperationStatusChanged.emit(True, f"Скрипты успешно выполнены для всех профилей ({len(selected_profiles)})")
+        # Запускаем скрипты в отдельном потоке
+        thread = threading.Thread(target=self._run_chrome_scripts_thread, args=(script_names, headless))
+        thread.daemon = True  # Делаем поток демоном, чтобы он завершился при закрытии приложения
+        thread.start()
+    
+    def _run_chrome_scripts_thread(self, script_names, headless=False):
+        """
+        Внутренний метод для запуска скриптов в отдельном потоке
+        
+        Args:
+            script_names: Список названий скриптов для запуска
+            headless: Запускать ли браузер в фоновом режиме
+        """
+        try:
+            logger.debug(f"run_task начал выполнение")
+            logger.debug(f"Выбранные профили в run_task: {self._selected_profiles}")
+            
+            if not self._selected_profiles:
+                logger.error(f"Не выбрано ни одного профиля")
+                self.scriptOperationStatusChanged.emit(False, "Не выбрано ни одного профиля")
+                self._scripts_running = False
+                return
+            
+            if not script_names:
+                logger.error(f"Не выбрано ни одного скрипта")
+                self.scriptOperationStatusChanged.emit(False, "Не выбрано ни одного скрипта")
+                self._scripts_running = False
+                return
+            
+            # Создаем копию выбранных профилей, чтобы избежать ошибки "Set changed size during iteration"
+            selected_profiles = list(self._selected_profiles)
+            
+            logger.info(f"Запуск скриптов {script_names} для профилей: {selected_profiles}, headless={headless}")
+            
+            # Получаем соответствие между человекочитаемыми названиями и директориями скриптов
+            # для Chrome скриптов
+            chrome_scripts_path = os.path.join(PROJECT_PATH, "data", "scripts", "chrome")
+            chrome_script_dirs = {}
+            
+            if os.path.exists(chrome_scripts_path):
+                for script_dir in os.listdir(chrome_scripts_path):
+                    script_path = os.path.join(chrome_scripts_path, script_dir)
+                    if os.path.isdir(script_path):
+                        config_path = os.path.join(script_path, "config.json")
+                        if os.path.exists(config_path):
+                            try:
+                                with open(config_path, 'r', encoding='utf-8') as f:
+                                    config = json.load(f)
+                                    human_name = config.get("human_name", script_dir)
+                                    chrome_script_dirs[human_name] = script_dir
+                            except Exception as e:
+                                logger.error(f"Ошибка при чтении конфигурации скрипта {script_dir}: {e}")
+            
+            # Получаем соответствие между человекочитаемыми названиями и директориями скриптов
+            # для Playwright скриптов
+            playwright_scripts_path = os.path.join(PROJECT_PATH, "data", "scripts", "playwright")
+            playwright_script_dirs = {}
+            
+            if os.path.exists(playwright_scripts_path):
+                for script_dir in os.listdir(playwright_scripts_path):
+                    script_path = os.path.join(playwright_scripts_path, script_dir)
+                    if os.path.isdir(script_path):
+                        config_path = os.path.join(script_path, "config.json")
+                        if os.path.exists(config_path):
+                            try:
+                                with open(config_path, 'r', encoding='utf-8') as f:
+                                    config = json.load(f)
+                                    human_name = config.get("human_name", script_dir)
+                                    playwright_script_dirs[human_name] = script_dir
+                            except Exception as e:
+                                logger.error(f"Ошибка при чтении конфигурации скрипта {script_dir}: {e}")
+            
+            # Получаем директории выбранных скриптов
+            selected_chrome_script_dirs = []
+            selected_playwright_script_dirs = []
+            
+            for script_name in script_names:
+                if script_name in chrome_script_dirs:
+                    selected_chrome_script_dirs.append(chrome_script_dirs[script_name])
+                elif script_name in playwright_script_dirs:
+                    selected_playwright_script_dirs.append(playwright_script_dirs[script_name])
                 else:
-                    self.scriptOperationStatusChanged.emit(True, f"Скрипты выполнены для {success_count} из {total_operations} профилей")
-                
-            except Exception as e:
-                logger.error(f"Ошибка при запуске Chrome скриптов: {e}")
-                self.scriptOperationStatusChanged.emit(False, f"Ошибка при запуске Chrome скриптов: {e}")
+                    logger.warning(f"Скрипт {script_name} не найден")
+            
+            if not selected_chrome_script_dirs and not selected_playwright_script_dirs:
+                self.scriptOperationStatusChanged.emit(False, "Не удалось найти выбранные скрипты")
+                self._scripts_running = False
+                return
+            
+            # Запускаем скрипты для каждого профиля
+            success_count = 0
+            total_operations = len(selected_profiles)
+            
+            for profile in selected_profiles:
+                try:
+                    # Если профиль содержит префикс "Profile ", удаляем его перед запуском
+                    if isinstance(profile, str) and profile.startswith("Profile "):
+                        profile_name = profile.replace("Profile ", "")
+                    else:
+                        profile_name = profile
+                    
+                    # Запускаем Chrome скрипты
+                    if selected_chrome_script_dirs:
+                        logger.info(f"Запускаем Chrome скрипты для профиля {profile_name}")
+                        self.chrome.run_scripts(profile_name, selected_chrome_script_dirs, headless)
+                    
+                    # Запускаем Playwright скрипты
+                    if selected_playwright_script_dirs:
+                        logger.info(f"Запускаем Playwright скрипты для профиля {profile_name}")
+                        from src.chrome.playwright_chrome import PlaywrightChrome
+                        pw = PlaywrightChrome()
+                        pw.run_scripts(profile_name, selected_playwright_script_dirs, headless)
+                    
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"Ошибка при запуске скриптов для профиля {profile}: {e}")
+            
+            # Отправляем сигнал о завершении операции
+            if success_count == total_operations:
+                self.scriptOperationStatusChanged.emit(True, f"Скрипты успешно выполнены для всех профилей ({total_operations})")
+            elif success_count > 0:
+                self.scriptOperationStatusChanged.emit(True, f"Скрипты выполнены для {success_count} из {total_operations} профилей")
+            else:
+                self.scriptOperationStatusChanged.emit(False, "Не удалось выполнить скрипты ни для одного профиля")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при запуске скриптов: {e}")
+            self.scriptOperationStatusChanged.emit(False, f"Ошибка при запуске скриптов: {e}")
         
-        # Запускаем задачу в отдельном потоке
-        threading.Thread(target=run_task).start()
+        finally:
+            # Сбрасываем флаг выполнения скриптов
+            self._scripts_running = False
+            
+            # Сбрасываем флаг isProcessing
+            QMetaObject.invokeMethod(self, "_set_is_processing", Qt.QueuedConnection, Q_ARG(bool, False))
+            
+            logger.info("===== ОПЕРАЦИЯ ВЫПОЛНЕНИЯ СКРИПТОВ ЗАВЕРШЕНА =====")
+    
+    @Slot(bool)
+    def _set_is_processing(self, value):
+        """
+        Устанавливает флаг isProcessing
+        
+        Args:
+            value: Новое значение флага
+        """
+        self._is_processing = value
     
     @Slot(list, list, bool)
     def runManagerScripts(self, profiles, scripts, shuffle_scripts=False):
@@ -1629,6 +1753,9 @@ class ProfileManager(QObject):
         """
         logger.info(f"Вызван метод runManagerScripts с параметрами: profiles={profiles}, scripts={scripts}, shuffle_scripts={shuffle_scripts}")
         try:
+            # Устанавливаем флаг выполнения скриптов
+            self._scripts_running = True
+            
             # Запускаем скрипты в отдельном потоке
             logger.info("Создаем поток для выполнения скриптов")
             thread = threading.Thread(
@@ -1642,6 +1769,8 @@ class ProfileManager(QObject):
         except Exception as e:
             logger.error(f"Ошибка при запуске менеджер-скриптов: {e}")
             self.managerScriptOperationStatusChanged.emit(False, f"Ошибка при запуске скриптов: {e}")
+            # Сбрасываем флаг выполнения скриптов в случае ошибки
+            self._scripts_running = False
     
     def _run_manager_scripts_thread(self, profiles, scripts, shuffle_scripts=False):
         """Выполняет менеджер-скрипты в отдельном потоке
@@ -1686,6 +1815,10 @@ class ProfileManager(QObject):
             logger.error(f"Ошибка при выполнении менеджер-скриптов: {e}")
             logger.info("Отправляем сигнал об ошибке при выполнении скриптов")
             self.managerScriptOperationStatusChanged.emit(False, f"Ошибка при выполнении скриптов: {e}")
+        
+        finally:
+            # Сбрасываем флаг выполнения скриптов
+            self._scripts_running = False
     
     @Slot()
     def update_manager_scripts_list(self):
@@ -2320,6 +2453,24 @@ class ProfileManager(QObject):
         except Exception as e:
             logger.error(f"Ошибка при поиске списков профилей: {e}")
 
+    @Slot()
+    def confirmed_quit_application(self):
+        """
+        Принудительно завершает работу приложения после подтверждения пользователем,
+        даже если выполняются скрипты
+        """
+        logger.warning("Подтвержденное завершение работы приложения во время выполнения скриптов")
+        
+        # Закрываем все процессы Chrome, связанные с проектом
+        logger.info("Закрытие процессов Chrome, связанных с проектом...")
+        kill_chrome_processes()
+        
+        # Устанавливаем флаг выполнения скриптов в False, чтобы избежать проблем при закрытии
+        if hasattr(self, '_scripts_running'):
+            self._scripts_running = False
+        
+        QGuiApplication.quit()
+
 def setup_logger():
     logger.remove()
     logger_level = "DEBUG" if general_config['show_debug_logs'] else "INFO"
@@ -2348,6 +2499,12 @@ def main():
     # Добавляем обработку сигналов завершения
     def signal_handler(sig, frame):
         logger.info("Получен сигнал завершения. Закрываем приложение...")
+        
+        # Закрываем все процессы Chrome, связанные с проектом
+        logger.info("Закрытие процессов Chrome, связанных с проектом...")
+        kill_chrome_processes()
+        
+        # Принудительно завершаем приложение без проверки флага _scripts_running
         app.quit()
         sys.exit(0)
     
