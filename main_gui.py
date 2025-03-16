@@ -50,6 +50,9 @@ class ProfileManager(QObject):
     # Сигналы для работы с менеджер-скриптами
     managerScriptsListChanged = Signal()
     managerScriptOperationStatusChanged = Signal(bool, str)
+    # Сигналы для работы с playwright-скриптами
+    playwrightScriptsListChanged = Signal()
+    playwrightScriptOperationStatusChanged = Signal(bool, str)
     # Сигналы для работы со списками профилей
     profileListsChanged = Signal()
     profileListOperationStatusChanged = Signal(bool, str)  # Сигнал для уведомления о статусе операций со списками профилей
@@ -65,6 +68,7 @@ class ProfileManager(QObject):
         self._selected_profiles = set()
         self._filtered_profiles = []
         self._manager_scripts_list = []  # Список доступных менеджер-скриптов
+        self._playwright_scripts_list = []  # Список доступных playwright-скриптов
         self._profile_lists = []  # Список доступных списков профилей
         self._current_list_id = ""  # Текущий выбранный список профилей
         self._scripts_running = False  # Флаг, указывающий выполняются ли скрипты в данный момент
@@ -1835,35 +1839,212 @@ class ProfileManager(QObject):
             # Сбрасываем флаг выполнения скриптов
             self._scripts_running = False
     
+    @Slot(list, list, bool)
+    def runPlaywrightScripts(self, profiles, scripts, headless=False):
+        """Запускает выбранные Playwright скрипты для выбранных профилей
+        
+        Args:
+            profiles (list): Список профилей для запуска
+            scripts (list): Список скриптов для запуска
+            headless (bool): Запускать ли браузер в фоновом режиме
+        """
+        logger.info(f"Вызван метод runPlaywrightScripts с параметрами: profiles={profiles}, scripts={scripts}, headless={headless}")
+        try:
+            # Устанавливаем флаг выполнения скриптов
+            self._scripts_running = True
+            
+            # Запускаем скрипты в отдельном потоке
+            logger.info("Создаем поток для выполнения скриптов")
+            thread = threading.Thread(
+                target=self._run_playwright_scripts_thread,
+                args=(profiles, scripts, headless)
+            )
+            thread.daemon = True
+            logger.info("Запускаем поток")
+            thread.start()
+            logger.info("Поток запущен успешно")
+        except Exception as e:
+            logger.error(f"Ошибка при запуске Playwright скриптов: {e}")
+            self.playwrightScriptOperationStatusChanged.emit(False, f"Ошибка при запуске скриптов: {e}")
+            # Сбрасываем флаг выполнения скриптов в случае ошибки
+            self._scripts_running = False
+    
+    def _run_playwright_scripts_thread(self, profiles, scripts, headless=False):
+        """Выполняет Playwright скрипты в отдельном потоке
+        
+        Args:
+            profiles (list): Список профилей для запуска
+            scripts (list): Список скриптов для запуска
+            headless (bool): Запускать ли браузер в фоновом режиме
+        """
+        logger.info(f"Запущен поток _run_playwright_scripts_thread с параметрами: profiles={profiles}, scripts={scripts}, headless={headless}")
+        try:
+            from src.client.menu.run_playwright_scripts_on_multiple_profiles import run_playwright_scripts_on_multiple_profiles
+            logger.info("Импортирован модуль run_playwright_scripts_on_multiple_profiles")
+            
+            # Создаем экземпляр PlaywrightChrome
+            from src.chrome.playwright_chrome import PlaywrightChrome
+            from src.scripts import register_all_scripts
+            
+            pw = PlaywrightChrome()
+            
+            # Регистрируем все доступные скрипты
+            register_all_scripts(pw)
+            
+            # Получаем соответствие между человекочитаемыми названиями и ключами скриптов
+            script_keys = {}
+            for key, value in pw.scripts.items():
+                script_keys[value['human_name']] = key
+            
+            # Преобразуем человекочитаемые названия скриптов в ключи
+            script_keys_to_run = [script_keys[script] for script in scripts if script in script_keys]
+            
+            # Используем имена профилей как есть, без удаления префикса "Profile "
+            processed_profiles = profiles
+            
+            # Запускаем скрипты для каждого профиля
+            success = True
+            for profile in processed_profiles:
+                try:
+                    logger.info(f"Запускаем скрипты для профиля {profile}")
+                    pw.run_scripts(
+                        str(profile),
+                        script_keys_to_run,
+                        headless
+                    )
+                    logger.info(f"Скрипты для профиля {profile} выполнены")
+                except Exception as e:
+                    logger.error(f"Ошибка при выполнении скриптов для профиля {profile}: {e}")
+                    success = False
+            
+            # Отправляем сигнал о завершении операции
+            if success:
+                logger.info(f"Отправляем сигнал об успешном выполнении скриптов для {len(processed_profiles)} профилей")
+                self.playwrightScriptOperationStatusChanged.emit(True, f"Скрипты успешно выполнены для всех профилей ({len(processed_profiles)})")
+            else:
+                logger.info("Отправляем сигнал об ошибке при выполнении скриптов")
+                self.playwrightScriptOperationStatusChanged.emit(False, "Произошла ошибка при выполнении скриптов для некоторых профилей")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при выполнении Playwright скриптов: {e}")
+            logger.info("Отправляем сигнал об ошибке при выполнении скриптов")
+            self.playwrightScriptOperationStatusChanged.emit(False, f"Ошибка при выполнении скриптов: {e}")
+        
+        finally:
+            # Сбрасываем флаг выполнения скриптов
+            self._scripts_running = False
+    
     @Slot()
     def update_manager_scripts_list(self):
         """Обновляет список доступных менеджер-скриптов"""
+        logger.info("Вызван метод update_manager_scripts_list")
         try:
-            # Получаем список скриптов из директории src/manager/scripts
-            scripts_dir = os.path.join(os.path.dirname(__file__), 'src', 'manager', 'scripts')
+            # Получаем список файлов в директории скриптов
+            scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "manager", "scripts")
+            logger.info(f"Директория скриптов: {scripts_dir}")
+            
+            # Получаем список файлов .py, исключая файлы, начинающиеся с '__'
             self._manager_scripts_list = []
+            for file in os.listdir(scripts_dir):
+                if file.endswith(".py") and not file.startswith("__"):
+                    script_name = file[:-3]  # Удаляем расширение .py
+                    self._manager_scripts_list.append(script_name)
             
-            if os.path.exists(scripts_dir):
-                for file in os.listdir(scripts_dir):
-                    if file.endswith('.py') and not file.startswith('__'):
-                        script_name = file[:-3]  # Убираем расширение .py
-                        self._manager_scripts_list.append(script_name)
+            logger.info(f"Найдены скрипты: {self._manager_scripts_list}")
             
-            # Сортируем список скриптов
-            self._manager_scripts_list.sort()
-            
-            # Уведомляем об изменении списка скриптов
+            # Отправляем сигнал об изменении списка скриптов (без параметров)
             self.managerScriptsListChanged.emit()
-            logger.info(f"Обновлен список менеджер-скриптов: {self._manager_scripts_list}")
-            
+            logger.info("Отправлен сигнал managerScriptsListChanged")
         except Exception as e:
             logger.error(f"Ошибка при обновлении списка менеджер-скриптов: {e}")
+    
+    @Slot()
+    def update_playwright_scripts_list(self):
+        """Обновляет список доступных Playwright скриптов"""
+        logger.info("Вызван метод update_playwright_scripts_list")
+        try:
+            # Получаем список скриптов Playwright
+            self._playwright_scripts_list = []
+            
+            # Создаем экземпляр PlaywrightChrome
+            from src.chrome.playwright_chrome import PlaywrightChrome
+            from src.scripts import register_all_scripts
+            
+            pw = PlaywrightChrome()
+            
+            # Регистрируем все доступные скрипты
+            register_all_scripts(pw)
+            
+            # Получаем список скриптов
+            for key, value in pw.scripts.items():
+                self._playwright_scripts_list.append(value['human_name'])
+            
+            logger.info(f"Найдены скрипты Playwright: {self._playwright_scripts_list}")
+            
+            # Отправляем сигнал об изменении списка скриптов (без параметров)
+            self.playwrightScriptsListChanged.emit()
+            logger.info("Отправлен сигнал playwrightScriptsListChanged")
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении списка Playwright скриптов: {e}")
+    
+    @Slot()
+    def update_chrome_scripts_list(self):
+        """Обновляет список доступных Chrome скриптов"""
+        logger.info("Вызван метод update_chrome_scripts_list")
+        try:
+            # Получаем список скриптов из директорий chrome и playwright
+            scripts_path = os.path.join(PROJECT_PATH, "data", "scripts", "chrome")
+            playwright_scripts_path = os.path.join(PROJECT_PATH, "data", "scripts", "playwright")
+            scripts = []
+            
+            # Получаем скрипты из директории chrome
+            if os.path.exists(scripts_path):
+                for script_dir in os.listdir(scripts_path):
+                    script_path = os.path.join(scripts_path, script_dir)
+                    if os.path.isdir(script_path):
+                        config_path = os.path.join(script_path, "config.json")
+                        if os.path.exists(config_path):
+                            try:
+                                with open(config_path, 'r', encoding='utf-8') as f:
+                                    config = json.load(f)
+                                    human_name = config.get("human_name", script_dir)
+                                    scripts.append(human_name)
+                            except Exception as e:
+                                logger.error(f"Ошибка при чтении конфигурации скрипта {script_dir}: {e}")
+            
+            # Получаем скрипты из директории playwright
+            if os.path.exists(playwright_scripts_path):
+                for script_dir in os.listdir(playwright_scripts_path):
+                    script_path = os.path.join(playwright_scripts_path, script_dir)
+                    if os.path.isdir(script_path):
+                        config_path = os.path.join(script_path, "config.json")
+                        if os.path.exists(config_path):
+                            try:
+                                with open(config_path, 'r', encoding='utf-8') as f:
+                                    config = json.load(f)
+                                    human_name = config.get("human_name", script_dir)
+                                    scripts.append(human_name)
+                            except Exception as e:
+                                logger.error(f"Ошибка при чтении конфигурации скрипта {script_dir}: {e}")
+            
+            logger.info(f"Найдены Chrome скрипты: {scripts}")
+            
+            # Отправляем сигнал с обновленным списком скриптов
+            self.profilesListChanged.emit()
+            logger.info("Отправлен сигнал profilesListChanged для обновления списка скриптов")
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении списка Chrome скриптов: {e}")
     
     @Property(list, notify=managerScriptsListChanged)
     def managerScriptsList(self):
         """Возвращает список доступных менеджер-скриптов"""
         return self._manager_scripts_list
-
+    
+    @Property(list, notify=playwrightScriptsListChanged)
+    def playwrightScriptsList(self):
+        """Возвращает список доступных Playwright скриптов"""
+        return self._playwright_scripts_list
+    
     @Slot(str, result=bool)
     def exportProfilesToCSV(self, file_path):
         """
@@ -2497,7 +2678,6 @@ def setup_logger():
 
 def main():
     app = QGuiApplication(sys.argv)
-    
     # Настраиваем логгер
     setup_logger()
     

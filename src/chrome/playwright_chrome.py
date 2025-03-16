@@ -79,7 +79,7 @@ class PlaywrightChrome:
             logger.error(f'⛔  {profile_name} - не удалось создать профиль')
             logger.debug(f'{profile_name} - не удалось создать профиль, причина: {e}')
     
-    def launch_profile(self, profile_name, headless=False, debug_port=None, timeout=None):
+    def launch_profile(self, profile_name, headless=False, debug_port=None, timeout=None, close_tabs=False):
         """
         Запускает профиль Chrome с использованием Playwright
         
@@ -88,6 +88,7 @@ class PlaywrightChrome:
             headless: Запускать ли в безголовом режиме
             debug_port: Порт для отладки (если None, будет использован порт из конфигурации)
             timeout: Таймаут для запуска Chrome (если None, будет использован таймаут из конфигурации)
+            close_tabs: Закрывать ли все вкладки при запуске профиля (по умолчанию False)
             
         Returns:
             bool: True если профиль успешно запущен, иначе False
@@ -100,6 +101,8 @@ class PlaywrightChrome:
             # Определяем путь к профилю
             if profile_name.isdigit():
                 profile_dir = f"Profile {profile_name}"
+            elif not profile_name.startswith("Profile "):
+                profile_dir = f"Profile {profile_name}"
             else:
                 profile_dir = profile_name
                 
@@ -108,8 +111,20 @@ class PlaywrightChrome:
             
             # Проверяем существование профиля
             if not os.path.exists(profile_path):
-                logger.error(f"❌ {profile_name} - профиль не найден по пути: {profile_path}")
-                return False
+                # Пробуем альтернативный путь без префикса "Profile "
+                if profile_name.startswith("Profile "):
+                    alt_profile_dir = profile_name[8:]  # Убираем "Profile " из начала
+                    alt_profile_path = os.path.join(CHROME_DATA_PATH, alt_profile_dir)
+                    if os.path.exists(alt_profile_path):
+                        profile_dir = alt_profile_dir
+                        profile_path = alt_profile_path
+                        logger.info(f"📂 {profile_name} - найден альтернативный путь к профилю: {profile_path}")
+                    else:
+                        logger.error(f"❌ {profile_name} - профиль не найден по путям: {profile_path} и {alt_profile_path}")
+                        return False
+                else:
+                    logger.error(f"❌ {profile_name} - профиль не найден по пути: {profile_path}")
+                    return False
                 
             # Получаем список расширений для профиля
             profile_extensions = []
@@ -188,8 +203,8 @@ class PlaywrightChrome:
             
             logger.info(f"✅ {profile_name} - процесс Chrome запущен с PID: {self.chrome_process.pid}")
             
-            # Ждем указанное время для запуска Chrome
-            time.sleep(5)
+            # Ждем минимальное время для запуска Chrome
+            time.sleep(0.1)
             
             # Проверяем доступность порта отладки
             logger.info(f"🔍 {profile_name} - проверяем доступность порта отладки {debug_port}...")
@@ -198,11 +213,11 @@ class PlaywrightChrome:
             debug_url = self.config.get("debug_endpoint", f"http://localhost:{debug_port}")
             
             # Проверяем доступность порта отладки с повторными попытками
-            max_attempts = 30
+            max_attempts = 15
             for attempt in range(1, max_attempts + 1):
                 try:
                     logger.debug(f"Попытка {attempt}/{max_attempts} подключения к {debug_url}/json/version")
-                    response = requests.get(f"{debug_url}/json/version", timeout=1)
+                    response = requests.get(f"{debug_url}/json/version", timeout=0.5)
                     if response.status_code == 200:
                         logger.debug(f"Ответ от Chrome DevTools: {response.json()}")
                         logger.info(f"✅ {profile_name} - порт отладки доступен")
@@ -211,7 +226,7 @@ class PlaywrightChrome:
                     if attempt == max_attempts:
                         logger.error(f"❌ {profile_name} - не удалось подключиться к порту отладки после {max_attempts} попыток")
                         return False
-                    time.sleep(1)
+                    time.sleep(0.2)
             
             # Подключаемся к Chrome через CDP
             try:
@@ -243,7 +258,7 @@ class PlaywrightChrome:
                 
                 # Открываем простую страницу с именем профиля в заголовке
                 try:
-                    # Создаем HTML-страницу с именем профиля в заголовке
+                    # Создаем упрощенный HTML-контент для быстрой загрузки
                     html_content = f"""
                     <!DOCTYPE html>
                     <html>
@@ -252,68 +267,52 @@ class PlaywrightChrome:
                         <style>
                             body {{
                                 font-family: Arial, sans-serif;
-                                background: linear-gradient(135deg, #1e2a38, #3a414a);
+                                background: #1e2a38;
                                 color: #f0f0f0;
                                 margin: 0;
-                                padding: 0;
-                                display: flex;
-                                justify-content: center;
-                                align-items: center;
-                                height: 100vh;
-                                overflow: hidden;
-                            }}
-                            .profile-info {{
-                                background: rgba(255, 255, 255, 0.1);
-                                padding: 30px;
-                                border-radius: 10px;
+                                padding: 20px;
                                 text-align: center;
-                                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
                             }}
                             h1 {{
-                                font-size: 2.5em;
-                                margin-bottom: 10px;
+                                font-size: 24px;
                                 color: #ffcc00;
-                            }}
-                            p {{
-                                font-size: 1.2em;
-                                color: #ddd;
                             }}
                         </style>
                     </head>
                     <body>
-                        <div class="profile-info">
-                            <h1>{profile_name}</h1>
-                            <p>Вы успешно запустили профиль Chrome</p>
-                        </div>
+                        <h1>Профиль: {profile_name}</h1>
                     </body>
                     </html>
                     """
                     
-                    # Устанавливаем содержимое новой страницы
-                    self.page.set_content(html_content)
+                    # Устанавливаем содержимое новой страницы напрямую, без ожидания загрузки ресурсов
+                    self.page.set_content(html_content, wait_until="domcontentloaded")
                     logger.info(f"✅ {profile_name} - открыта страница с информацией о профиле в новой вкладке")
                     
-                    # Закрываем все лишние вкладки, кроме нашей и вкладок расширений
-                    try:
-                        # Получаем все вкладки
-                        all_pages = self.context.pages
-                        
-                        # Закрываем все вкладки, кроме нашей с информацией о профиле
-                        for page in all_pages:
-                            if page != self.page:
-                                try:
-                                    # Получаем URL вкладки для логирования
-                                    page_url = page.url
-                                    
-                                    # Закрываем вкладку
-                                    page.close()
-                                    logger.debug(f"🔒 {profile_name} - закрыта вкладка: {page_url}")
-                                except Exception as e:
-                                    logger.warning(f"⚠️ {profile_name} - не удалось закрыть вкладку: {str(e)}")
-                        
-                        logger.info(f"✅ {profile_name} - закрыты все лишние вкладки")
-                    except Exception as e:
-                        logger.error(f"❌ {profile_name} - ошибка при закрытии лишних вкладок: {str(e)}")
+                    # Закрываем все лишние вкладки только если параметр close_tabs=True
+                    if close_tabs:
+                        try:
+                            # Получаем все вкладки
+                            all_pages = self.context.pages
+                            
+                            # Закрываем все вкладки, кроме нашей с информацией о профиле
+                            for page in all_pages:
+                                if page != self.page:
+                                    try:
+                                        # Получаем URL вкладки для логирования
+                                        page_url = page.url
+                                        
+                                        # Закрываем вкладку
+                                        page.close()
+                                        logger.debug(f"🔒 {profile_name} - закрыта вкладка: {page_url}")
+                                    except Exception as e:
+                                        logger.warning(f"⚠️ {profile_name} - не удалось закрыть вкладку: {str(e)}")
+                            
+                            logger.info(f"✅ {profile_name} - закрыты все лишние вкладки")
+                        except Exception as e:
+                            logger.error(f"❌ {profile_name} - ошибка при закрытии лишних вкладок: {str(e)}")
+                    else:
+                        logger.info(f"ℹ️ {profile_name} - автоматическое закрытие вкладок отключено")
                     
                     logger.success(f"✅ {profile_name} - профиль успешно запущен")
                     return True
@@ -342,13 +341,14 @@ class PlaywrightChrome:
             headless: Запускать ли браузер в фоновом режиме
         """
         try:
-            browser = self.launch_profile(profile_name, headless)
-            if not browser:
+            # Запускаем профиль
+            success = self.launch_profile(profile_name, headless)
+            if not success:
                 raise Exception('не удалось запустить браузер')
             
             # Получаем контекст и страницу
-            context = browser.contexts[0]  # Используем существующий контекст
-            page = context.pages[0]  # Используем существующую страницу
+            context = self.context  # Используем существующий контекст
+            page = self.page  # Используем существующую страницу
             
             logger.debug(f'{profile_name} - подключение установлено')
             

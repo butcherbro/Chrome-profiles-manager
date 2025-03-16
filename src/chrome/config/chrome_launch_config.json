@@ -7,7 +7,8 @@
             "--remote-debugging-port={debug_port}",
             "--no-first-run",
             "--no-default-browser-check",
-            "--enable-automation"
+            "--enable-automation",
+            "--restore-last-session"
         ],
         "optional": {
             "headless": "--headless=new"

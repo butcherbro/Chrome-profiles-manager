@@ -22,6 +22,7 @@ def main():
         '📝 задать комментарии': menu.update_comments,
         '🤖 прогон скриптов [chrome]': menu.run_chrome_scripts_on_multiple_profiles,
         '🤖 прогон скриптов [manager]': menu.run_manager_scripts_on_multiple_profiles,
+        '🤖 прогон скриптов [playwright]': menu.run_playwright_scripts_on_multiple_profiles,
         '🧩 работа с расширениями': menu.manage_extensions,
         '➕ создание профилей': menu.create_multiple_profiles,
         '💀 убить процессы Chrome': kill_chrome_processes,

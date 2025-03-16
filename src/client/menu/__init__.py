@@ -3,6 +3,7 @@ from .launch_multiple_profiles import launch_multiple_profiles
 from .manage_extensions import manage_extensions
 from .run_chrome_scripts_on_multiple_profiles import run_chrome_scripts_on_multiple_profiles
 from .run_manager_scripts_on_multiple_profiles import run_manager_scripts_on_multiple_profiles
+from .run_playwright_scripts_on_multiple_profiles import run_playwright_scripts_on_multiple_profiles
 from .show_all_profiles import show_all_profiles
 from .update_comments import update_comments
 

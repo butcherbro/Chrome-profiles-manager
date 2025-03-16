@@ -166,6 +166,16 @@ ApplicationWindow {
         }
     }
     
+    PlaywrightScriptsRunner {
+        id: playwrightScriptsRunner
+        visible: false
+        
+        onBackClicked: {
+            // Обновляем список профилей при закрытии окна прогона скриптов
+            profileManager.update_profiles_list()
+        }
+    }
+    
     ProfileListManager {
         id: profileListManagerWindow
         visible: false
@@ -226,6 +236,7 @@ ApplicationWindow {
                         { text: "Управление расширениями", icon: "🧩", action: function() { extensionManagerWindow.show() } },
                         { text: "Прогон скриптов [chrome]", icon: "🤖", action: function() { chromeScriptsRunner.show() } },
                         { text: "Прогон скриптов [manager]", icon: "🤖", action: function() { managerScriptsRunner.show() } },
+                        { text: "Прогон скриптов [playwright]", icon: "🤖", action: function() { playwrightScriptsRunner.show() } },
                         { text: "Создание профилей и списков", icon: "➕", action: function() { profileListManagerWindow.show() } },
                         { text: "Убить процессы Chrome", icon: "💀", action: function() { profileManager.kill_chrome() } },
                         { text: "Выход", icon: "🚪", action: function() { profileManager.quit_application() } }
