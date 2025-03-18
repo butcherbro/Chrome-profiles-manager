@@ -37,6 +37,7 @@ from datetime import datetime
 import uuid
 from PySide6.QtCore import Q_ARG
 from PySide6.QtCore import QMetaObject
+from playwright.sync_api import Page
 
 class ProfileManager(QObject):
     profilesListChanged = Signal()

@@ -8,6 +8,7 @@
 from loguru import logger
 from src.scripts.metamask_import import register_script as register_metamask_import
 from src.scripts.test_open_tab import register_script as register_test_open_tab
+from src.scripts.rabby_import_playwright import register_script as register_rabby_import
 
 def register_all_scripts(pw):
     """
@@ -23,6 +24,9 @@ def register_all_scripts(pw):
     
     # Регистрируем скрипт теста открытия вкладки
     register_test_open_tab(pw)
+    
+    # Регистрируем скрипт импорта Rabby
+    register_rabby_import(pw)
     
     logger.info(f"✅ Зарегистрировано скриптов: {len(pw.scripts)}")
     for script_name, script_info in pw.scripts.items():
