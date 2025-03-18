@@ -1,0 +1,20 @@
+{
+    "extension_id": "acmacodkjbdgmoleebolmdjonilkdbch",
+    "selectors": {
+        "import_address_button": "button:has-text('I already have an address')",
+        "seed_phrase_button": "div[class*='rabby-ItemWrapper'] >> text=Seed Phrase",
+        "private_key_button": "div[class*='rabby-ItemWrapper'] >> text=Private Key",
+        "private_key_input": "#privateKey",
+        "seed_phrase_inputs": "input[placeholder*='•'], .is-mnemonics-input input, input.ant-input",
+        "password_input": "#password",
+        "confirm_password_input": "#confirmPassword",
+        "confirm_button": "//button[contains(@type,'button')], button:has(span:has-text('Confirm')), span:has-text('Confirm'), button:has-text('Confirm'), button[type='submit'], button.ant-btn-primary",
+        "import_button": "button:has-text('Import'), button[type='submit']:has-text('Import')"
+    },
+    "timeouts": {
+        "navigation": 10000,
+        "element":5000,
+        "action": 3000
+    },
+    "run_delay_sec": 0.5
+} 
